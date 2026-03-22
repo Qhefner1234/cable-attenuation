@@ -58,8 +58,10 @@ let pendingFromLeg = null;
 
 // Diagram drag state
 let diagCanvas    = null;
-let diagDrag      = null;   // { idx, startX, startLen }
-let diagBodyRects = [];     // [{ x, topY, botY }] one per splitter, for hit testing
+let diagDrag      = null;   // { idx, startX, startLen }  — splitter body drag
+let diagLegDrag   = null;   // { i, j, startX, startLen } — terminal leg drag
+let diagBodyRects = [];     // [{ x, topY, botY }]  one per splitter body
+let diagLegRects  = [];     // [{ i, j, x, y, w, h }]  one per terminal leg val box
 
 // Diagram layout constants
 const PX_PER_FT  = 2.5;   // pixels per foot of cable
@@ -426,9 +428,7 @@ function _drawDiagram() {
     const cl   = contLegs[i];
     const ref  = cl === -1 ? Math.floor((n - 1) / 2) : cl;
 
-    const valRight  = barXs[i] + BODY_W + VAL_XOFF + 10 + VAL_W;
     const nextBodyL = barXs[i + 1];
-    if (valRight <= nextBodyL) continue;   // no X clash — natural height is fine
 
     // Next body's vertical extent using its (already-computed) stretched rowH
     const nrh   = rowHs[i + 1];
@@ -436,20 +436,22 @@ function _drawDiagram() {
     const nn    = SPLITTERS[nItem.type].legs.length;
     const ncl   = contLegs[i + 1];
     const nref  = ncl === -1 ? Math.floor((nn - 1) / 2) : ncl;
-    const nTopRel = (0 - nref) * nrh - BODY_PAD - 32;   // topmost leg rel Y minus padding/labels
+    const nTopRel = (0 - nref) * nrh - BODY_PAD - 32;
     const nBotRel = (nn - 1 - nref) * nrh + BODY_PAD + 4;
 
-    // Find minimum rowH so every terminal leg's val box clears the next body
+    // Check each terminal leg individually — only stretch if THAT leg's val box
+    // (accounting for its own legLen) overlaps the next body horizontally
     let needed = ROW_H;
     for (let j = 0; j < n; j++) {
       if (j === cl) continue;
-      const offset = j - ref;   // signed distance from continuing leg
+      const offset  = j - ref;
       if (offset === 0) continue;
+      const legLen  = item.legLens?.[j] ?? 0;
+      const valRight = barXs[i] + BODY_W + VAL_XOFF + 10 + legLen * PX_PER_FT + VAL_W;
+      if (valRight <= nextBodyL) continue;   // this leg's val box clears next body
       if (offset > 0) {
-        // leg below spine: need leg Y > nBotRel + VAL_H/2 + 6
         needed = Math.max(needed, (nBotRel + VAL_H / 2 + 6) / offset);
       } else {
-        // leg above spine: need leg Y < nTopRel - VAL_H/2 - 6  (both negative)
         needed = Math.max(needed, (-nTopRel + VAL_H / 2 + 6) / (-offset));
       }
     }
@@ -477,7 +479,16 @@ function _drawDiagram() {
   const yShift  = Math.max(0, 8 - minAbsY);
   const spineY  = spineAbsY + yShift;
   const canvasH = maxAbsY + yShift + 20;
-  const canvasW = Math.max(curX + VAL_XOFF + 10 + VAL_W + PAD_X + 8, 420);
+  let maxRight = curX + PAD_X + 8;
+  for (let i = 0; i < splitterChain.length; i++) {
+    const { cl, n } = layouts[i];
+    for (let j = 0; j < n; j++) {
+      if (j === cl && i < splitterChain.length - 1) continue;
+      const legLen = splitterChain[i].legLens?.[j] ?? 0;
+      maxRight = Math.max(maxRight, barXs[i] + BODY_W + VAL_XOFF + 10 + legLen * PX_PER_FT + VAL_W + PAD_X + 8);
+    }
+  }
+  const canvasW = Math.max(maxRight, 420);
 
   // Resize canvas
   canvas.width  = canvasW * dpr;
@@ -520,6 +531,7 @@ function _drawDiagram() {
 
   // Splitters
   diagBodyRects = [];
+  diagLegRects  = [];
   for (let i = 0; i < splitterChain.length; i++) {
     const def        = SPLITTERS[splitterChain[i].type];
     const res        = computed ? computed[i] : null;
@@ -572,17 +584,27 @@ function _drawDiagram() {
         dline(portX, legAbsY, nextBarX, legAbsY, accent, 2.5, 0.9);
         _drawCableLabel(ctx, portX, nextBarX, spineY + 14, splitterChain[i + 1].cableLen ?? 0, muted, accent, diagDrag?.idx === i + 1);
       } else {
-        // Terminal leg — short solid stub then dashed line to val box.
-        // Val box sits naturally at the leg's own Y (body stretches instead of val box moving).
-        const stubEnd = portX + VAL_XOFF;
-        const bx      = stubEnd + 10;
+        // Terminal leg — stub then dashed line stretching to val box based on legLen.
+        const legLen     = splitterChain[i].legLens?.[j] ?? 0;
+        const isDragLeg  = diagLegDrag?.i === i && diagLegDrag?.j === j;
+        const stubEnd    = portX + VAL_XOFF;
+        const bx         = stubEnd + 10 + Math.max(0, legLen * PX_PER_FT);
         dline(portX, legAbsY, stubEnd, legAbsY, accent, 2, 0.75);
-        dline(stubEnd, legAbsY, bx, legAbsY, dim, 1.8, 0.6, [4, 3]);
+        dline(stubEnd, legAbsY, bx, legAbsY, dim, isDragLeg ? 2 : 1.8, isDragLeg ? 0.9 : 0.6, [4, 3]);
+        if (legLen > 0 || isDragLeg) {
+          _drawCableLabel(ctx, stubEnd, bx, legAbsY + 9, legLen, muted, accent, isDragLeg);
+        }
+        diagLegRects.push({ i, j, x: bx, y: legAbsY - VAL_H / 2, w: VAL_W, h: VAL_H });
         rr(bx, legAbsY - VAL_H / 2, VAL_W, VAL_H, 5);
         ctx.fillStyle = hiColor; ctx.fill();
-        ctx.strokeStyle = border; ctx.lineWidth = 1.2; ctx.stroke();
-        dtxt(bx + VAL_W / 2, legAbsY - 7, legDef.label,                              7,   muted, 'center', false);
-        dtxt(bx + VAL_W / 2, legAbsY + 7, legRes ? `${legRes.out42}/${legRes.out860} dBmV` : '—', 8.5, cyan, 'center', true);
+        ctx.strokeStyle = isDragLeg ? accent : border;
+        ctx.lineWidth = isDragLeg ? 2 : 1.2; ctx.stroke();
+        if (isDragLeg) {
+          dtxt(bx + VAL_W / 2, legAbsY, '◀  ▶', 9, accent, 'center', false);
+        } else {
+          dtxt(bx + VAL_W / 2, legAbsY - 7, legDef.label, 7, muted, 'center', false);
+          dtxt(bx + VAL_W / 2, legAbsY + 7, legRes ? `${legRes.out42}/${legRes.out860} dBmV` : '—', 8.5, cyan, 'center', true);
+        }
       }
     }
   }
@@ -602,12 +624,18 @@ function _setupDiagramDrag() {
   const canvas = diagCanvas;
   if (!canvas) return;
 
-  function hitTest(mx, my) {
+  function bodyHitTest(mx, my) {
     for (let i = 0; i < diagBodyRects.length; i++) {
       const r = diagBodyRects[i];
       if (mx >= r.x && mx <= r.x + 22 && my >= r.topY && my <= r.botY) return i;
     }
     return -1;
+  }
+  function legHitTest(mx, my) {
+    for (const r of diagLegRects) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return r;
+    }
+    return null;
   }
   function canvasXY(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -616,61 +644,80 @@ function _setupDiagramDrag() {
     return [(clientX - rect.left) / rect.width * lw,
             (clientY - rect.top)  / rect.height * lh];
   }
+  function commitDrag() {
+    diagDrag = null; diagLegDrag = null;
+    renderSplitterChain();
+    updateSignalLevels();
+    _drawDiagram();
+  }
 
   canvas.addEventListener('mousedown', e => {
     const [mx, my] = canvasXY(e.clientX, e.clientY);
-    const idx = hitTest(mx, my);
-    if (idx >= 0) {
-      diagDrag = { idx, startX: mx, startLen: splitterChain[idx].cableLen ?? 0 };
+    const bi = bodyHitTest(mx, my);
+    if (bi >= 0) {
+      diagDrag = { idx: bi, startX: mx, startLen: splitterChain[bi].cableLen ?? 0 };
+      canvas.style.cursor = 'ew-resize';
+      e.preventDefault(); return;
+    }
+    const lr = legHitTest(mx, my);
+    if (lr) {
+      const startLen = splitterChain[lr.i].legLens?.[lr.j] ?? 0;
+      diagLegDrag = { i: lr.i, j: lr.j, startX: mx, startLen };
       canvas.style.cursor = 'ew-resize';
       e.preventDefault();
     }
   });
 
   canvas.addEventListener('mousemove', e => {
-    if (diagDrag) return;
+    if (diagDrag || diagLegDrag) return;
     const [mx, my] = canvasXY(e.clientX, e.clientY);
-    canvas.style.cursor = hitTest(mx, my) >= 0 ? 'ew-resize' : 'default';
+    canvas.style.cursor = (bodyHitTest(mx, my) >= 0 || legHitTest(mx, my)) ? 'ew-resize' : 'default';
   });
 
   window.addEventListener('mousemove', e => {
-    if (!diagDrag) return;
-    const [mx] = canvasXY(e.clientX, e.clientY);
-    const newLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
-    splitterChain[diagDrag.idx].cableLen = newLen;
-    _drawDiagram();
+    if (diagDrag) {
+      const [mx] = canvasXY(e.clientX, e.clientY);
+      const newLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
+      splitterChain[diagDrag.idx].cableLen = newLen;
+      _drawDiagram(); return;
+    }
+    if (diagLegDrag) {
+      const [mx] = canvasXY(e.clientX, e.clientY);
+      const newLen = Math.round(Math.max(0, Math.min(500, diagLegDrag.startLen + (mx - diagLegDrag.startX) / PX_PER_FT)));
+      if (!splitterChain[diagLegDrag.i].legLens) splitterChain[diagLegDrag.i].legLens = [];
+      splitterChain[diagLegDrag.i].legLens[diagLegDrag.j] = newLen;
+      _drawDiagram();
+    }
   });
 
   window.addEventListener('mouseup', () => {
-    if (!diagDrag) return;
-    diagDrag = null;
-    renderSplitterChain();
-    updateSignalLevels();
-    _drawDiagram();
+    if (diagDrag || diagLegDrag) commitDrag();
   });
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     const [mx, my] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
-    const idx = hitTest(mx, my);
-    if (idx >= 0) diagDrag = { idx, startX: mx, startLen: splitterChain[idx].cableLen ?? 0 };
+    const bi = bodyHitTest(mx, my);
+    if (bi >= 0) { diagDrag = { idx: bi, startX: mx, startLen: splitterChain[bi].cableLen ?? 0 }; return; }
+    const lr = legHitTest(mx, my);
+    if (lr) diagLegDrag = { i: lr.i, j: lr.j, startX: mx, startLen: splitterChain[lr.i].legLens?.[lr.j] ?? 0 };
   }, { passive: false });
 
   canvas.addEventListener('touchmove', e => {
-    if (!diagDrag) return;
+    if (!diagDrag && !diagLegDrag) return;
     e.preventDefault();
     const [mx] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
-    const newLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
-    splitterChain[diagDrag.idx].cableLen = newLen;
+    if (diagDrag) {
+      splitterChain[diagDrag.idx].cableLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
+    } else {
+      if (!splitterChain[diagLegDrag.i].legLens) splitterChain[diagLegDrag.i].legLens = [];
+      splitterChain[diagLegDrag.i].legLens[diagLegDrag.j] = Math.round(Math.max(0, Math.min(500, diagLegDrag.startLen + (mx - diagLegDrag.startX) / PX_PER_FT)));
+    }
     _drawDiagram();
   }, { passive: false });
 
   canvas.addEventListener('touchend', () => {
-    if (!diagDrag) return;
-    diagDrag = null;
-    renderSplitterChain();
-    updateSignalLevels();
-    _drawDiagram();
+    if (diagDrag || diagLegDrag) commitDrag();
   });
 }
 
