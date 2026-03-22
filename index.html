@@ -21,146 +21,192 @@
     </svg>
   </button>
 
-  <main class="main-grid">
+  <div class="info-topbar">
+    <span class="info-topbar-item">Impedance: <span class="info-topbar-val" id="cableInfo">75 &Omega;</span></span>
+    <span class="info-topbar-sep">·</span>
+    <span class="info-topbar-item">dB / 100 ft —</span>
+    <span class="info-topbar-item">RG-59: <span class="info-topbar-val">0.77 / 6.41 / 8.91</span></span>
+    <span class="info-topbar-sep">·</span>
+    <span class="info-topbar-item">RG-6: <span class="info-topbar-val">0.57 / 5.17 / 7.18</span></span>
+    <span class="info-topbar-sep">·</span>
+    <span class="info-topbar-item">RG-11: <span class="info-topbar-val">0.36 / 3.29 / 4.71</span></span>
+  </div>
 
-    <!-- LEFT: Controls -->
-    <aside class="panel panel-controls">
+  <main class="main-layout">
 
-      <section class="control-section">
-        <h2 class="section-label">Cable Type</h2>
-        <div class="cable-btn-group" role="group" aria-label="Cable type selection">
-          <button class="cable-btn active" data-cable="RG-59">RG-59</button>
-          <button class="cable-btn" data-cable="RG-6">RG-6</button>
-          <button class="cable-btn" data-cable="RG-11">RG-11</button>
-        </div>
-        <div class="cable-info" id="cableInfo">
-          <span class="cable-info-label">Impedance</span>
-          <span class="cable-info-value">75 &Omega;</span>
-        </div>
-      </section>
+    <!-- ══ TOP: Cable run ══ -->
+    <div class="run-section">
 
-      <section class="control-section">
-        <h2 class="section-label">Cable Length</h2>
-        <div class="input-group">
-          <button class="spin-btn" id="decrementBtn" aria-label="Decrease length" tabindex="-1">−</button>
-          <input
-            type="number"
-            id="lengthInput"
-            class="length-input"
-            min="1"
-            max="600"
-            value="100"
-            placeholder="Length"
-            aria-label="Cable length in feet"
-          />
-          <span class="input-unit">ft</span>
-          <button class="spin-btn" id="incrementBtn" aria-label="Increase length" tabindex="-1">+</button>
-        </div>
-        <p class="input-hint">Enter cable run length in feet</p>
-        <div class="preset-btns">
-          <button class="preset-btn" data-length="75">75 ft</button>
-          <button class="preset-btn" data-length="100">100 ft</button>
-          <button class="preset-btn" data-length="150">150 ft</button>
-        </div>
-        <div class="slider-row" style="margin-top:0.5rem;">
-          <label class="slider-label" for="sketchLength">
-            <span>Slider</span>
-            <span class="slider-value" id="sketchLengthVal">100 ft</span>
-          </label>
-          <input type="range" id="sketchLength" min="1" max="600" value="100" class="styled-range" />
-        </div>
-      </section>
+      <aside class="panel panel-controls">
 
-      <section class="control-section spec-table-section">
-        <h2 class="section-label">Reference Specs <span class="spec-unit">(dB / 100 ft)</span></h2>
-        <table class="spec-table" aria-label="Attenuation reference values">
-          <thead>
-            <tr>
-              <th>Cable</th>
-              <th>5 MHz</th>
-              <th>645 MHz</th>
-              <th>1.2 GHz</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>RG-59</td>
-              <td>0.77</td>
-              <td>6.41</td>
-              <td>8.91</td>
-            </tr>
-            <tr>
-              <td>RG-6</td>
-              <td>0.57</td>
-              <td>5.17</td>
-              <td>7.18</td>
-            </tr>
-            <tr>
-              <td>RG-11</td>
-              <td>0.36</td>
-              <td>3.29</td>
-              <td>4.71</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-    </aside>
-
-    <!-- RIGHT: Results + Sketch -->
-    <div class="panel-right">
-
-      <section class="panel panel-results">
-        <h2 class="section-label">Attenuation Results</h2>
-        <div class="results-summary" id="resultsSummary">
-          Calculating for <span id="summaryLength">100</span> ft of <span id="summaryCable">RG-59</span>
-        </div>
-        <div class="result-cards">
-
-          <div class="result-card" data-freq="low">
-            <div class="result-freq">5 MHz</div>
-            <div class="result-value" id="result5">
-              <span class="result-num" id="val5">—</span>
-              <span class="result-unit">dB</span>
-            </div>
-            <div class="result-bar-track">
-              <div class="result-bar" id="bar5"></div>
-            </div>
-            <div class="result-desc">Return path / low-band</div>
+        <section class="control-section" style="padding-top:0;">
+          <h2 class="section-label">Cable Type</h2>
+          <div class="cable-btn-group" role="group" aria-label="Cable type selection">
+            <button class="cable-btn active" data-cable="RG-59">RG-59</button>
+            <button class="cable-btn" data-cable="RG-6">RG-6</button>
+            <button class="cable-btn" data-cable="RG-11">RG-11</button>
           </div>
+        </section>
 
-          <div class="result-card" data-freq="mid">
-            <div class="result-freq">645 MHz</div>
-            <div class="result-value" id="result645">
-              <span class="result-num" id="val645">—</span>
-              <span class="result-unit">dB</span>
-            </div>
-            <div class="result-bar-track">
-              <div class="result-bar" id="bar645"></div>
-            </div>
-            <div class="result-desc">Mid-band / digital cable</div>
+        <section class="control-section">
+          <h2 class="section-label">Cable Length</h2>
+          <div class="input-group">
+            <button class="spin-btn" id="decrementBtn" aria-label="Decrease length" tabindex="-1">−</button>
+            <input
+              type="number"
+              id="lengthInput"
+              class="length-input"
+              min="1"
+              max="600"
+              value="100"
+              placeholder="Length"
+              aria-label="Cable length in feet"
+            />
+            <span class="input-unit">ft</span>
+            <button class="spin-btn" id="incrementBtn" aria-label="Increase length" tabindex="-1">+</button>
           </div>
-
-          <div class="result-card" data-freq="high">
-            <div class="result-freq">1.2 GHz</div>
-            <div class="result-value" id="result1200">
-              <span class="result-num" id="val1200">—</span>
-              <span class="result-unit">dB</span>
-            </div>
-            <div class="result-bar-track">
-              <div class="result-bar" id="bar1200"></div>
-            </div>
-            <div class="result-desc">High-band / DOCSIS 3.1</div>
+          <p class="input-hint">Enter cable run length in feet</p>
+          <div class="preset-btns">
+            <button class="preset-btn" data-length="75">75 ft</button>
+            <button class="preset-btn" data-length="100">100 ft</button>
+            <button class="preset-btn" data-length="150">150 ft</button>
           </div>
+          <div class="slider-row" style="margin-top:0.5rem;">
+            <label class="slider-label" for="sketchLength">
+              <span>Slider</span>
+              <span class="slider-value" id="sketchLengthVal">100 ft</span>
+            </label>
+            <input type="range" id="sketchLength" min="1" max="600" value="100" class="styled-range" />
+          </div>
+        </section>
 
+      </aside>
+
+      <div class="run-right">
+
+        <section class="panel panel-results">
+          <h2 class="section-label">Attenuation Results</h2>
+          <div class="results-summary" id="resultsSummary">
+            Calculating for <span id="summaryLength">100</span> ft of <span id="summaryCable">RG-59</span>
+          </div>
+          <div class="result-cards">
+
+            <div class="result-card" data-freq="low">
+              <div class="result-freq">5 MHz</div>
+              <div class="result-value" id="result5">
+                <span class="result-num" id="val5">—</span>
+                <span class="result-unit">dB</span>
+              </div>
+              <div class="result-bar-track">
+                <div class="result-bar" id="bar5"></div>
+              </div>
+              <div class="result-desc">Return path / low-band</div>
+            </div>
+
+            <div class="result-card" data-freq="mid">
+              <div class="result-freq">645 MHz</div>
+              <div class="result-value" id="result645">
+                <span class="result-num" id="val645">—</span>
+                <span class="result-unit">dB</span>
+              </div>
+              <div class="result-bar-track">
+                <div class="result-bar" id="bar645"></div>
+              </div>
+              <div class="result-desc">Mid-band / digital cable</div>
+            </div>
+
+            <div class="result-card" data-freq="high">
+              <div class="result-freq">1.2 GHz</div>
+              <div class="result-value" id="result1200">
+                <span class="result-num" id="val1200">—</span>
+                <span class="result-unit">dB</span>
+              </div>
+              <div class="result-bar-track">
+                <div class="result-bar" id="bar1200"></div>
+              </div>
+              <div class="result-desc">High-band / DOCSIS 3.1</div>
+            </div>
+
+          </div>
+        </section>
+
+        <div class="panel panel-dude">
+          <canvas id="cableDudeCanvas" aria-label="Cable technician animation"></canvas>
         </div>
-      </section>
 
-      <div class="panel panel-dude">
-        <canvas id="cableDudeCanvas" aria-label="Cable technician animation"></canvas>
+      </div>
+    </div>
+
+    <!-- ══ DIVIDER ══ -->
+    <div class="section-divider">
+      <div class="divider-line"></div>
+      <span class="divider-label">Splitter Analysis</span>
+      <div class="divider-line"></div>
+    </div>
+
+    <!-- ══ BOTTOM: Splitter analysis ══ -->
+    <div class="splitter-section">
+
+      <aside class="panel panel-controls">
+
+        <section class="control-section" style="padding-top:0;">
+          <h2 class="section-label">Signal Level Calculator</h2>
+          <div class="sig-row">
+            <span class="sig-freq">42 MHz</span>
+            <div class="input-group sig-input-group">
+              <input type="number" id="sigIn42" class="length-input sig-input"
+                     placeholder="Input" step="0.1" max="30" aria-label="42 MHz input level in dBmV" />
+              <span class="input-unit">dBmV</span>
+            </div>
+          </div>
+          <div class="sig-row">
+            <span class="sig-freq">860 MHz</span>
+            <div class="input-group sig-input-group">
+              <input type="number" id="sigIn860" class="length-input sig-input"
+                     placeholder="Input" step="0.1" max="30" aria-label="860 MHz input level in dBmV" />
+              <span class="input-unit">dBmV</span>
+            </div>
+          </div>
+          <div class="sig-results">
+            <div class="sig-result-row sig-out-combined">
+              <span class="sig-out-half">
+                <span class="sig-result-label">42 <span class="sig-result-unit">MHz</span> out</span>
+                <span class="sig-result-val"><span id="sigOut42">—</span> <span class="sig-result-unit">dBmV</span></span>
+              </span>
+              <span class="sig-out-half">
+                <span class="sig-result-label">860 <span class="sig-result-unit">MHz</span> out</span>
+                <span class="sig-result-val"><span id="sigOut860">—</span> <span class="sig-result-unit">dBmV</span></span>
+              </span>
+            </div>
+            <div class="sig-result-row sig-loss-row sig-out-combined">
+              <span class="sig-out-half">
+                <span class="sig-result-label">loss @ 42</span>
+                <span class="sig-result-val"><span id="sigLoss42">—</span> <span class="sig-result-unit">dB</span></span>
+              </span>
+              <span class="sig-out-half">
+                <span class="sig-result-label">loss @ 860</span>
+                <span class="sig-result-val"><span id="sigLoss860">—</span> <span class="sig-result-unit">dB</span></span>
+              </span>
+            </div>
+          </div>
+        </section>
+
+      </aside>
+
+      <div class="splitter-right">
+        <div class="panel panel-tree" id="panelTree">
+          <h2 class="section-label">Signal Path</h2>
+          <div class="tree-scroll" id="treeDiagram"></div>
+        </div>
+
+        <div class="panel panel-chain">
+          <h2 class="section-label">Splitter Chain</h2>
+          <div id="splitterChain"></div>
+        </div>
       </div>
 
     </div>
+
   </main>
 
   <script src="script.js" defer></script>
