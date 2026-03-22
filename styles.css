@@ -73,13 +73,15 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  height: 100%;
 }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--bg);
   color: var(--fg);
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -90,20 +92,22 @@ body {
    Header
    ---------------------------------------------------------- */
 .site-header {
-  background-color: var(--bg-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  background-color: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
   padding: 0 2rem;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 8%, transparent), var(--shadow-sm);
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .header-inner {
   max-width: 1280px;
   margin: 0 auto;
-  height: 72px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -116,58 +120,85 @@ body {
   gap: 0.875rem;
 }
 
+.brand-icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--accent-glow);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-brand:hover .brand-icon-wrap {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
 .brand-icon {
-  width: 32px;
-  height: 32px;
+  width: 18px;
+  height: 18px;
   color: var(--accent);
   flex-shrink: 0;
   transition: color 0.3s ease;
 }
 
 .header-title {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 700;
-  color: var(--fg);
-  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, var(--fg) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
   line-height: 1.2;
-  transition: color 0.3s ease;
 }
 
 .header-subtitle {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--fg-muted);
   font-weight: 400;
-  margin-top: 1px;
+  margin-top: 2px;
+  letter-spacing: 0.01em;
   transition: color 0.3s ease;
 }
 
 /* Theme Toggle */
 .theme-toggle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--bg-highlight);
-  color: var(--fg-dim);
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 200;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--fg-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  transition: background-color 0.2s ease, border-color 0.3s ease, color 0.2s ease, transform 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .theme-toggle:hover {
   background: var(--accent-glow);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--accent);
-  transform: rotate(20deg);
+  transform: rotate(15deg) scale(1.05);
 }
 
 .theme-toggle svg {
-  width: 18px;
-  height: 18px;
-  transition: opacity 0.2s ease, transform 0.3s ease;
+  width: 16px;
+  height: 16px;
+  transition: opacity 0.2s ease;
 }
 
 html[data-theme="dark"] .icon-sun  { display: block; }
@@ -180,14 +211,13 @@ html[data-theme="light"] .icon-moon { display: block; }
    ---------------------------------------------------------- */
 .main-grid {
   flex: 1;
-  max-width: 1280px;
   width: 100%;
-  margin: 0 auto;
   padding: 2rem;
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 1.5rem;
-  align-items: start;
+  align-items: stretch;
+  overflow: hidden;
 }
 
 /* ----------------------------------------------------------
@@ -202,10 +232,15 @@ html[data-theme="light"] .icon-moon { display: block; }
   transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
+.panel-controls {
+  overflow-y: auto;
+}
+
 .panel-right {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  overflow: hidden;
 }
 
 /* ----------------------------------------------------------
@@ -389,6 +424,32 @@ html[data-theme="light"] .icon-moon { display: block; }
   color: var(--fg-muted);
   margin-top: 0.375rem;
   transition: color 0.3s ease;
+}
+
+.preset-btns {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.625rem;
+}
+
+.preset-btn {
+  flex: 1;
+  padding: 0.3rem 0;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
 }
 
 /* Reference Table */
@@ -676,8 +737,16 @@ html[data-theme="light"] .icon-moon { display: block; }
 @media (max-width: 900px) {
   .main-grid {
     grid-template-columns: 1fr;
-    padding: 1.25rem;
-    gap: 1.25rem;
+    overflow-y: auto;
+    align-items: start;
+  }
+
+  .panel-controls {
+    overflow-y: visible;
+  }
+
+  .panel-right {
+    overflow: visible;
   }
 
   .result-cards {
@@ -686,29 +755,11 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 @media (max-width: 600px) {
-  .header-inner {
-    height: 60px;
-  }
-
-  .header-subtitle {
-    display: none;
-  }
-
   .result-cards {
     grid-template-columns: 1fr;
   }
 
   .result-num {
     font-size: 1.75rem;
-  }
-
-  .main-grid {
-    padding: 1rem;
-  }
-}
-
-@media (max-width: 400px) {
-  .site-header {
-    padding: 0 1rem;
   }
 }

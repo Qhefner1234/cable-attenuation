@@ -11,29 +11,15 @@
 </head>
 <body>
 
-  <header class="site-header">
-    <div class="header-inner">
-      <div class="header-brand">
-        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path d="M2 12h4M18 12h4M6 12a6 6 0 1 0 12 0 6 6 0 0 0-12 0Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          <circle cx="12" cy="12" r="2" fill="currentColor"/>
-        </svg>
-        <div>
-          <h1 class="header-title">Coax Attenuation Calculator</h1>
-          <p class="header-subtitle">Signal loss estimation for RG-series coaxial cable</p>
-        </div>
-      </div>
-      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-    </div>
-  </header>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
 
   <main class="main-grid">
 
@@ -62,7 +48,7 @@
             id="lengthInput"
             class="length-input"
             min="1"
-            max="1000"
+            max="600"
             value="100"
             placeholder="Length"
             aria-label="Cable length in feet"
@@ -71,12 +57,17 @@
           <button class="spin-btn" id="incrementBtn" aria-label="Increase length" tabindex="-1">+</button>
         </div>
         <p class="input-hint">Enter cable run length in feet</p>
-        <div class="slider-row" style="margin-top:0.75rem;">
+        <div class="preset-btns">
+          <button class="preset-btn" data-length="75">75 ft</button>
+          <button class="preset-btn" data-length="100">100 ft</button>
+          <button class="preset-btn" data-length="150">150 ft</button>
+        </div>
+        <div class="slider-row" style="margin-top:0.5rem;">
           <label class="slider-label" for="sketchLength">
             <span>Slider</span>
             <span class="slider-value" id="sketchLengthVal">100 ft</span>
           </label>
-          <input type="range" id="sketchLength" min="1" max="1000" value="100" class="styled-range" />
+          <input type="range" id="sketchLength" min="1" max="600" value="100" class="styled-range" />
         </div>
       </section>
 
@@ -171,10 +162,6 @@
 
     </div>
   </main>
-
-  <footer class="site-footer">
-    <p>Attenuation values sourced from Toner Cable Equipment typical attenuation chart (dB/100 ft @ 68&deg;F). 645 MHz values are linearly interpolated between the 600 MHz and 750 MHz table entries. Actual loss may vary with cable quality, connectors, and temperature.</p>
-  </footer>
 
   <script src="script.js" defer></script>
 </body>
