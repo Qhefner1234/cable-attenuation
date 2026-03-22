@@ -12,13 +12,94 @@ const ATTENUATION = {
 };
 
 /* ----------------------------------------------------------
+   Splitter Data
+   ---------------------------------------------------------- */
+const SPLITTERS = {
+  '2way': {
+    label: '2-Way',
+    legs: [
+      { label: '-3.5 dB Leg', loss42: 3.5, loss860: 3.5 },
+      { label: '-3.5 dB Leg', loss42: 3.5, loss860: 3.5 },
+    ],
+  },
+  '3way-unbal': {
+    label: '3-Way Unbalanced',
+    legs: [
+      { label: '-3.5 dB Leg', loss42: 3.5, loss860: 3.5 },
+      { label: '-7 dB Leg',   loss42: 7.0, loss860: 7.0 },
+      { label: '-7 dB Leg',   loss42: 7.0, loss860: 7.0 },
+    ],
+  },
+  '3way-bal': {
+    label: '3-Way Balanced',
+    legs: [
+      { label: '-5.5 dB Leg', loss42: 5.5, loss860: 5.5 },
+      { label: '-5.5 dB Leg', loss42: 5.5, loss860: 5.5 },
+      { label: '-5.5 dB Leg', loss42: 5.5, loss860: 5.5 },
+    ],
+  },
+  'dc6': {
+    label: 'DC 6',
+    legs: [
+      { label: '-0.5 dB Leg', loss42: 0.5, loss860: 0.5 },
+      { label: '-6.5 dB Leg', loss42: 6.5, loss860: 6.5 },
+    ],
+  },
+};
+
+/* ----------------------------------------------------------
    State
    ---------------------------------------------------------- */
 let activeCable = 'RG-59';
 
+// Splitter chain state
+let splitterChain = [];   // [{ type, fromLeg, cableLen }]  cableLen = ft of cable before this splitter
+let pendingFromLeg = null;
+
+// Diagram drag state
+let diagCanvas    = null;
+let diagDrag      = null;   // { idx, startX, startLen }  — splitter body drag
+let diagLegDrag   = null;   // { i, j, startX, startLen } — terminal leg drag
+let diagBodyRects = [];     // [{ x, topY, botY }]  one per splitter body
+let diagLegRects  = [];     // [{ i, j, x, y, w, h }]  one per terminal leg val box
+
+// Diagram layout constants
+const PX_PER_FT  = 2.5;   // pixels per foot of cable
+const MAX_CABLE  = 200;    // max draggable cable length (ft)
+const MIN_GAP_PX = 24;     // minimum visual gap even at 0 ft
+
 /* ----------------------------------------------------------
    Calculation
    ---------------------------------------------------------- */
+function interpolateAttenuation(cable, freqMHz) {
+  const t = ATTENUATION[cable];
+  let f1, f2, a1, a2;
+  if (freqMHz <= 645) { f1 = 5;   f2 = 645;  a1 = t[5];   a2 = t[645]; }
+  else                { f1 = 645; f2 = 1200; a1 = t[645]; a2 = t[1200]; }
+  const frac = (Math.sqrt(freqMHz) - Math.sqrt(f1)) / (Math.sqrt(f2) - Math.sqrt(f1));
+  return a1 + frac * (a2 - a1);
+}
+
+function updateSignalLevels() {
+  const len   = parseFloat(document.getElementById('lengthInput').value);
+  const in42  = parseFloat(document.getElementById('sigIn42').value);
+  const in860 = parseFloat(document.getElementById('sigIn860').value);
+
+  const valid  = !isNaN(len) && len > 0;
+  const has42  = !isNaN(in42);
+  const has860 = !isNaN(in860);
+
+  const att42  = valid ? interpolateAttenuation(activeCable, 42)  * (len / 100) : null;
+  const att860 = valid ? interpolateAttenuation(activeCable, 860) * (len / 100) : null;
+
+  document.getElementById('sigOut42').textContent  = (valid && has42)  ? (in42  - att42).toFixed(1)  : '—';
+  document.getElementById('sigOut860').textContent = (valid && has860) ? (in860 - att860).toFixed(1) : '—';
+  document.getElementById('sigLoss42').textContent  = valid ? att42.toFixed(2)  : '—';
+  document.getElementById('sigLoss860').textContent = valid ? att860.toFixed(2) : '—';
+  renderSplitterChain();
+  renderTreeDiagram();
+}
+
 function calculate(cable, lengthFt) {
   const table = ATTENUATION[cable];
   return {
@@ -64,6 +145,580 @@ function updateResults() {
   bar1200.style.width = Math.min((result.f1200 / (ATTENUATION[activeCable][1200] * 10)) * 100, 100) + '%';
 
   if (window.cableDude) window.cableDude.setTarget(len);
+  updateSignalLevels();
+}
+
+/* ----------------------------------------------------------
+   Splitter Chain
+   ---------------------------------------------------------- */
+function computeChain() {
+  const in42  = parseFloat(document.getElementById('sigIn42').value);
+  const in860 = parseFloat(document.getElementById('sigIn860').value);
+  if (isNaN(in42) || isNaN(in860)) return null;
+
+  const att42  = interpolateAttenuation(activeCable, 42);
+  const att860 = interpolateAttenuation(activeCable, 860);
+
+  const results = [];
+  for (let i = 0; i < splitterChain.length; i++) {
+    const def      = SPLITTERS[splitterChain[i].type];
+    const cableLen = splitterChain[i].cableLen ?? 0;
+    let src42, src860;
+    if (i === 0) {
+      src42 = in42; src860 = in860;
+    } else {
+      const prev = results[i - 1];
+      const leg  = prev.legs[splitterChain[i].fromLeg];
+      src42  = leg.out42;
+      src860 = leg.out860;
+    }
+    // Apply cable run attenuation before this splitter
+    src42  = +(src42  - att42  * cableLen / 100).toFixed(2);
+    src860 = +(src860 - att860 * cableLen / 100).toFixed(2);
+
+    results.push({
+      in42: src42, in860: src860, cableLen,
+      legs: def.legs.map((leg, j) => {
+        const legLen = splitterChain[i].legLens?.[j] ?? 0;
+        return {
+          label:  leg.label,
+          out42:  +(src42  - leg.loss42  - att42  * legLen / 100).toFixed(1),
+          out860: +(src860 - leg.loss860 - att860 * legLen / 100).toFixed(1),
+        };
+      }),
+    });
+  }
+  return results;
+}
+
+function renderSplitterChain() {
+  const container = document.getElementById('splitterChain');
+  if (!container) return;
+
+  const computed = computeChain();
+  const hasInputs = computed !== null;
+  container.innerHTML = '';
+
+  // Render each splitter block
+  splitterChain.forEach((item, idx) => {
+    const res = hasInputs ? computed[idx] : null;
+    const block = document.createElement('div');
+    block.className = 'sp-block';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.className = 'sp-block-header';
+    hdr.innerHTML = `<span class="sp-block-label">${SPLITTERS[item.type].label}</span>` +
+      (res ? `<span class="sp-block-input">in: <b>${res.in42} / ${res.in860}</b> dBmV</span>` : '') +
+      `<button class="sp-remove-btn" data-idx="${idx}" title="Remove this and subsequent splitters">✕</button>`;
+    block.appendChild(hdr);
+
+    // Legs
+    const legsEl = document.createElement('div');
+    legsEl.className = 'sp-legs';
+    SPLITTERS[item.type].legs.forEach((leg, li) => {
+      const isChained = idx === splitterChain.length - 1 && pendingFromLeg === li;
+      const legLen = item.legLens?.[li] ?? 0;
+      const out42  = res ? res.legs[li].out42  : '—';
+      const out860 = res ? res.legs[li].out860 : '—';
+
+      const row = document.createElement('div');
+      row.className = 'sp-leg' + (isChained ? ' sp-leg-selected' : '');
+
+      const labelEl = document.createElement('span');
+      labelEl.className = 'sp-leg-label';
+      labelEl.textContent = leg.label;
+      row.appendChild(labelEl);
+
+      // Cable length input for this leg
+      const cableWrap = document.createElement('span');
+      cableWrap.className = 'sp-leg-cable';
+      const cableInput = document.createElement('input');
+      cableInput.type = 'number';
+      cableInput.className = 'sp-leg-len';
+      cableInput.min = '0'; cableInput.max = '500'; cableInput.value = legLen;
+      cableInput.addEventListener('input', () => {
+        if (!item.legLens) item.legLens = new Array(SPLITTERS[item.type].legs.length).fill(0);
+        item.legLens[li] = Math.max(0, parseFloat(cableInput.value) || 0);
+        renderTreeDiagram();
+      });
+      cableInput.addEventListener('change', () => {
+        renderSplitterChain();
+        renderTreeDiagram();
+      });
+      const ftSpan = document.createElement('span');
+      ftSpan.className = 'sp-leg-unit'; ftSpan.textContent = 'ft';
+      cableWrap.appendChild(cableInput);
+      cableWrap.appendChild(ftSpan);
+      row.appendChild(cableWrap);
+
+      const valsEl = document.createElement('span');
+      valsEl.className = 'sp-leg-vals';
+      valsEl.innerHTML = `<span class="sp-leg-val">${out42}</span><span class="sp-leg-sep">/</span><span class="sp-leg-val">${out860}</span><span class="sp-leg-unit">dBmV</span>`;
+      row.appendChild(valsEl);
+
+      // Only the last splitter's legs get the "connect here" button
+      if (idx === splitterChain.length - 1 && pendingFromLeg === null) {
+        const btn = document.createElement('button');
+        btn.className = 'sp-connect-btn';
+        btn.textContent = '+';
+        btn.title = 'Connect next splitter here';
+        btn.dataset.leg = li;
+        btn.addEventListener('click', () => { pendingFromLeg = li; renderSplitterChain(); renderTreeDiagram(); });
+        row.appendChild(btn);
+      }
+      legsEl.appendChild(row);
+    });
+    block.appendChild(legsEl);
+    container.appendChild(block);
+  });
+
+  // Type picker (first splitter or after leg selected)
+  const showPicker = splitterChain.length === 0 || pendingFromLeg !== null;
+  if (showPicker) {
+    if (splitterChain.length > 0 && pendingFromLeg !== null) {
+      const prompt = document.createElement('div');
+      prompt.className = 'sp-prompt';
+      prompt.textContent = `Select splitter type for this leg:`;
+      container.appendChild(prompt);
+    }
+    const picker = document.createElement('div');
+    picker.className = 'sp-type-picker';
+    Object.entries(SPLITTERS).forEach(([key, def]) => {
+      const btn = document.createElement('button');
+      btn.className = 'sp-type-btn';
+      btn.textContent = def.label;
+      btn.addEventListener('click', () => {
+        splitterChain.push({ type: key, fromLeg: pendingFromLeg, cableLen: 50, legLens: new Array(SPLITTERS[key].legs.length).fill(0) });
+        pendingFromLeg = null;
+        renderSplitterChain();
+        renderTreeDiagram();
+      });
+      picker.appendChild(btn);
+    });
+    container.appendChild(picker);
+  } else if (splitterChain.length > 0) {
+    // Show "connect to a leg" prompt
+    const prompt = document.createElement('div');
+    prompt.className = 'sp-prompt';
+    prompt.textContent = 'Select a leg above to connect the next splitter, or:';
+    container.appendChild(prompt);
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'sp-reset-btn';
+    resetBtn.textContent = 'Clear chain';
+    resetBtn.addEventListener('click', () => { splitterChain = []; pendingFromLeg = null; renderSplitterChain(); renderTreeDiagram(); });
+    container.appendChild(resetBtn);
+  }
+
+  // Remove button handler
+  container.querySelectorAll('.sp-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      splitterChain = splitterChain.slice(0, idx);
+      pendingFromLeg = null;
+      renderSplitterChain();
+      renderTreeDiagram();
+    });
+  });
+}
+
+/* ----------------------------------------------------------
+   Signal Path Tree Diagram (interactive canvas)
+   ---------------------------------------------------------- */
+function renderTreeDiagram() {
+  const container = document.getElementById('treeDiagram');
+  if (!container) return;
+
+  if (!diagCanvas) {
+    diagCanvas = document.createElement('canvas');
+    diagCanvas.style.display = 'block';
+    container.innerHTML = '';
+    container.appendChild(diagCanvas);
+    _setupDiagramDrag();
+  }
+
+  _drawDiagram();
+}
+
+function _drawDiagram() {
+  const canvas = diagCanvas;
+  if (!canvas) return;
+
+  const in42  = parseFloat(document.getElementById('sigIn42').value);
+  const in860 = parseFloat(document.getElementById('sigIn860').value);
+  const in42Str  = isNaN(in42)  ? '—' : String(in42);
+  const in860Str = isNaN(in860) ? '—' : String(in860);
+
+  const cs      = getComputedStyle(document.documentElement);
+  const accent  = cs.getPropertyValue('--accent').trim();
+  const muted   = cs.getPropertyValue('--fg-muted').trim();
+  const dim     = cs.getPropertyValue('--fg-dim').trim();
+  const hiColor = cs.getPropertyValue('--bg-highlight').trim();
+  const border  = cs.getPropertyValue('--border-subtle').trim();
+  const cyan    = cs.getPropertyValue('--cyan').trim();
+
+  const dpr = window.devicePixelRatio || 1;
+
+  // ── No splitters yet — always draw source box + hint ───────
+  if (splitterChain.length === 0) {
+    const W = 340, H = 90;
+    canvas.width  = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+    const sx = 12, sy = (H - 48) / 2;
+    ctx.beginPath(); ctx.roundRect(sx, sy, 128, 48, 7);
+    ctx.fillStyle = hiColor; ctx.fill();
+    ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '400 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = muted; ctx.fillText('SOURCE', sx + 64, sy + 14);
+    ctx.font = '600 12px "JetBrains Mono", monospace';
+    ctx.fillStyle = accent; ctx.fillText(`${in42Str} / ${in860Str}`, sx + 64, sy + 28);
+    ctx.font = '400 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = muted; ctx.fillText('dBmV', sx + 64, sy + 40);
+    ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(sx + 128, H / 2); ctx.lineTo(sx + 172, H / 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = '400 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = muted; ctx.textAlign = 'left';
+    ctx.fillText('add a splitter', sx + 136, H / 2);
+    ctx.globalAlpha = 1;
+    diagBodyRects = [];
+    return;
+  }
+
+  const computed = computeChain();
+
+  // Layout constants
+  const ROW_H    = 48;   // base row height, stretched per-body as needed
+  const PAD_X    = 12;
+  const SRC_W    = 128;
+  const SRC_H    = 48;
+  const BODY_W   = 22;
+  const BODY_PAD = 10;
+  const VAL_W    = 90;
+  const VAL_H    = 28;
+  const VAL_XOFF = 4;
+
+  const contLegs = splitterChain.map((_, i) =>
+    i < splitterChain.length - 1 ? splitterChain[i + 1].fromLeg : -1
+  );
+
+  // X positions — free, only MIN_GAP_PX floor so bodies don't literally stack
+  const srcRight = PAD_X + SRC_W;
+  const barXs = [];
+  let curX = srcRight;
+  for (let i = 0; i < splitterChain.length; i++) {
+    const cLen = splitterChain[i].cableLen ?? 0;
+    curX += Math.max(MIN_GAP_PX, cLen * PX_PER_FT);
+    barXs.push(curX);
+    curX += BODY_W;
+  }
+
+  // Per-splitter row height — body stretches when the next body is close (right-to-left).
+  // The val box stays at its natural position on its leg; the leg itself moves because
+  // the body is taller.
+  const rowHs = new Array(splitterChain.length).fill(ROW_H);
+  for (let i = splitterChain.length - 2; i >= 0; i--) {
+    const item = splitterChain[i];
+    const n    = SPLITTERS[item.type].legs.length;
+    const cl   = contLegs[i];
+    const ref  = cl === -1 ? Math.floor((n - 1) / 2) : cl;
+
+    const nextBodyL = barXs[i + 1];
+
+    // Next body's vertical extent using its (already-computed) stretched rowH
+    const nrh   = rowHs[i + 1];
+    const nItem = splitterChain[i + 1];
+    const nn    = SPLITTERS[nItem.type].legs.length;
+    const ncl   = contLegs[i + 1];
+    const nref  = ncl === -1 ? Math.floor((nn - 1) / 2) : ncl;
+    const nTopRel = (0 - nref) * nrh - BODY_PAD - 32;
+    const nBotRel = (nn - 1 - nref) * nrh + BODY_PAD + 4;
+
+    // Check each terminal leg individually — only stretch if THAT leg's val box
+    // (accounting for its own legLen) overlaps the next body horizontally
+    let needed = ROW_H;
+    for (let j = 0; j < n; j++) {
+      if (j === cl) continue;
+      const offset  = j - ref;
+      if (offset === 0) continue;
+      const legLen  = item.legLens?.[j] ?? 0;
+      const valRight = barXs[i] + BODY_W + VAL_XOFF + 10 + legLen * PX_PER_FT + VAL_W;
+      if (valRight <= nextBodyL) continue;   // this leg's val box clears next body
+      if (offset > 0) {
+        needed = Math.max(needed, (nBotRel + VAL_H / 2 + 6) / offset);
+      } else {
+        needed = Math.max(needed, (-nTopRel + VAL_H / 2 + 6) / (-offset));
+      }
+    }
+    rowHs[i] = needed;
+  }
+
+  // Layouts using per-splitter (possibly stretched) row heights
+  const layouts = splitterChain.map((item, i) => {
+    const n   = SPLITTERS[item.type].legs.length;
+    const cl  = contLegs[i];
+    const ref = cl === -1 ? Math.floor((n - 1) / 2) : cl;
+    const legYs = Array.from({ length: n }, (_, j) => (j - ref) * rowHs[i]);
+    return { legYs, cl, n };
+  });
+
+  let minRelY = 0, maxRelY = 0;
+  layouts.forEach(l => l.legYs.forEach(y => { minRelY = Math.min(minRelY, y); maxRelY = Math.max(maxRelY, y); }));
+
+  const SPINE_TOP_CLEAR = -minRelY + BODY_PAD + 40;
+  const spineAbsY = Math.max(60, SPINE_TOP_CLEAR + 8);
+
+  const minAbsY = spineAbsY + minRelY - BODY_PAD - 40;
+  const maxAbsY = spineAbsY + maxRelY + BODY_PAD + VAL_H / 2 + 8;
+
+  const yShift  = Math.max(0, 8 - minAbsY);
+  const spineY  = spineAbsY + yShift;
+  const canvasH = maxAbsY + yShift + 20;
+  let maxRight = curX + PAD_X + 8;
+  for (let i = 0; i < splitterChain.length; i++) {
+    const { cl, n } = layouts[i];
+    for (let j = 0; j < n; j++) {
+      if (j === cl && i < splitterChain.length - 1) continue;
+      const legLen = splitterChain[i].legLens?.[j] ?? 0;
+      maxRight = Math.max(maxRight, barXs[i] + BODY_W + VAL_XOFF + 10 + legLen * PX_PER_FT + VAL_W + PAD_X + 8);
+    }
+  }
+  const canvasW = Math.max(maxRight, 420);
+
+  // Resize canvas
+  canvas.width  = canvasW * dpr;
+  canvas.height = canvasH * dpr;
+  canvas.style.width  = canvasW + 'px';
+  canvas.style.height = canvasH + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Drawing helpers
+  function rr(x, y, w, h, r) {
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+  }
+  function dtxt(x, y, str, size, color, align, bold) {
+    ctx.font = `${bold ? 600 : 400} ${size}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle';
+    ctx.fillText(str, x, y);
+  }
+  function dline(x1, y1, x2, y2, color, w, alpha, dash) {
+    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.globalAlpha = alpha;
+    if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+
+  // Source box
+  const srcX = PAD_X, srcY = spineY - SRC_H / 2;
+  rr(srcX, srcY, SRC_W, SRC_H, 7);
+  ctx.fillStyle = hiColor; ctx.fill();
+  ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.globalAlpha = 1; ctx.stroke();
+  dtxt(srcX + SRC_W / 2, srcY + 14, 'SOURCE', 8, muted, 'center', false);
+  dtxt(srcX + SRC_W / 2, srcY + 28, `${in42Str} / ${in860Str}`, 12, accent, 'center', true);
+  dtxt(srcX + SRC_W / 2, srcY + 40, 'dBmV', 8, muted, 'center', false);
+
+  // Spine → first splitter (cable label goes ABOVE spine to avoid source box overlap)
+  dline(srcRight, spineY, barXs[0], spineY, accent, 2.5, 0.9);
+  _drawCableLabel(ctx, srcRight, barXs[0], spineY - 13, splitterChain[0].cableLen ?? 0, muted, accent, diagDrag?.idx === 0);
+
+  // Splitters
+  diagBodyRects = [];
+  diagLegRects  = [];
+  for (let i = 0; i < splitterChain.length; i++) {
+    const def        = SPLITTERS[splitterChain[i].type];
+    const res        = computed ? computed[i] : null;
+    const { legYs, cl, n } = layouts[i];
+    const barX       = barXs[i];
+    const absLegYs   = legYs.map(y => spineY + y);
+    const bodyTop    = absLegYs[0] - BODY_PAD;
+    const bodyBot    = absLegYs[n - 1] + BODY_PAD;
+    const bodyH      = bodyBot - bodyTop;
+    const bodyCX     = barX + BODY_W / 2;
+    const isDragging = diagDrag?.idx === i;
+
+    diagBodyRects.push({ x: barX, topY: bodyTop, botY: bodyBot });
+
+    // Labels stacked above body
+    if (isDragging) dtxt(bodyCX, bodyTop - 40, '◀  ▶', 9, accent, 'center', false);
+    dtxt(bodyCX, bodyTop - 27, def.label, 9, isDragging ? accent : muted, 'center', true);
+    if (res) dtxt(bodyCX, bodyTop - 14, `in: ${res.in42}/${res.in860} dBmV`, 7.5, muted, 'center', false);
+
+    // Body rect
+    rr(barX, bodyTop, BODY_W, bodyH, 4);
+    ctx.fillStyle = hiColor; ctx.fill();
+    ctx.strokeStyle = accent; ctx.lineWidth = isDragging ? 2.5 : 1.5; ctx.globalAlpha = 0.95; ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Vertical trunk on right edge of body
+    dline(barX + BODY_W, absLegYs[0], barX + BODY_W, absLegYs[n - 1], accent, 2, 0.75);
+
+    // Input stub (left side of body at spine level)
+    dline(barX - 2, spineY, barX, spineY, accent, 2.5, 0.9);
+
+    // Port dots
+    absLegYs.forEach(ly => {
+      ctx.beginPath(); ctx.arc(barX + BODY_W, ly, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = accent; ctx.globalAlpha = 0.9; ctx.fill(); ctx.globalAlpha = 1;
+    });
+
+    // Legs
+    for (let j = 0; j < n; j++) {
+      const legDef  = def.legs[j];
+      const legRes  = res ? res.legs[j] : null;
+      const legAbsY = absLegYs[j];
+      const portX   = barX + BODY_W;
+      const isCont  = j === cl && i < splitterChain.length - 1;
+
+      if (isCont) {
+        // Continuing leg — thick solid line to next body.
+        // Cable label goes BELOW the spine so it never clashes with body labels above.
+        const nextBarX = barXs[i + 1];
+        dline(portX, legAbsY, nextBarX, legAbsY, accent, 2.5, 0.9);
+        _drawCableLabel(ctx, portX, nextBarX, spineY + 14, splitterChain[i + 1].cableLen ?? 0, muted, accent, diagDrag?.idx === i + 1);
+      } else {
+        // Terminal leg — stub then dashed line stretching to val box based on legLen.
+        const legLen     = splitterChain[i].legLens?.[j] ?? 0;
+        const isDragLeg  = diagLegDrag?.i === i && diagLegDrag?.j === j;
+        const stubEnd    = portX + VAL_XOFF;
+        const bx         = stubEnd + 10 + Math.max(0, legLen * PX_PER_FT);
+        dline(portX, legAbsY, stubEnd, legAbsY, accent, 2, 0.75);
+        dline(stubEnd, legAbsY, bx, legAbsY, dim, isDragLeg ? 2 : 1.8, isDragLeg ? 0.9 : 0.6, [4, 3]);
+        if (legLen > 0 || isDragLeg) {
+          _drawCableLabel(ctx, stubEnd, bx, legAbsY + 9, legLen, muted, accent, isDragLeg);
+        }
+        diagLegRects.push({ i, j, x: bx, y: legAbsY - VAL_H / 2, w: VAL_W, h: VAL_H });
+        rr(bx, legAbsY - VAL_H / 2, VAL_W, VAL_H, 5);
+        ctx.fillStyle = hiColor; ctx.fill();
+        ctx.strokeStyle = isDragLeg ? accent : border;
+        ctx.lineWidth = isDragLeg ? 2 : 1.2; ctx.stroke();
+        if (isDragLeg) {
+          dtxt(bx + VAL_W / 2, legAbsY, '◀  ▶', 9, accent, 'center', false);
+        } else {
+          dtxt(bx + VAL_W / 2, legAbsY - 7, legDef.label, 7, muted, 'center', false);
+          dtxt(bx + VAL_W / 2, legAbsY + 7, legRes ? `${legRes.out42}/${legRes.out860} dBmV` : '—', 8.5, cyan, 'center', true);
+        }
+      }
+    }
+  }
+}
+
+function _drawCableLabel(ctx, x1, x2, y, cableLen, muted, accent, isActive) {
+  const midX = (x1 + x2) / 2;
+  ctx.font = `${isActive ? 700 : 400} 8px "JetBrains Mono", monospace`;
+  ctx.fillStyle = isActive ? accent : muted;
+  ctx.globalAlpha = isActive ? 1 : 0.55;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(`${cableLen} ft`, midX, y);
+  ctx.globalAlpha = 1;
+}
+
+function _setupDiagramDrag() {
+  const canvas = diagCanvas;
+  if (!canvas) return;
+
+  function bodyHitTest(mx, my) {
+    for (let i = 0; i < diagBodyRects.length; i++) {
+      const r = diagBodyRects[i];
+      if (mx >= r.x && mx <= r.x + 22 && my >= r.topY && my <= r.botY) return i;
+    }
+    return -1;
+  }
+  function legHitTest(mx, my) {
+    for (const r of diagLegRects) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return r;
+    }
+    return null;
+  }
+  function canvasXY(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const lw = canvas.width / (window.devicePixelRatio || 1);
+    const lh = canvas.height / (window.devicePixelRatio || 1);
+    return [(clientX - rect.left) / rect.width * lw,
+            (clientY - rect.top)  / rect.height * lh];
+  }
+  function commitDrag() {
+    diagDrag = null; diagLegDrag = null;
+    renderSplitterChain();
+    updateSignalLevels();
+    _drawDiagram();
+  }
+
+  canvas.addEventListener('mousedown', e => {
+    const [mx, my] = canvasXY(e.clientX, e.clientY);
+    const bi = bodyHitTest(mx, my);
+    if (bi >= 0) {
+      diagDrag = { idx: bi, startX: mx, startLen: splitterChain[bi].cableLen ?? 0 };
+      canvas.style.cursor = 'ew-resize';
+      e.preventDefault(); return;
+    }
+    const lr = legHitTest(mx, my);
+    if (lr) {
+      const startLen = splitterChain[lr.i].legLens?.[lr.j] ?? 0;
+      diagLegDrag = { i: lr.i, j: lr.j, startX: mx, startLen };
+      canvas.style.cursor = 'ew-resize';
+      e.preventDefault();
+    }
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (diagDrag || diagLegDrag) return;
+    const [mx, my] = canvasXY(e.clientX, e.clientY);
+    canvas.style.cursor = (bodyHitTest(mx, my) >= 0 || legHitTest(mx, my)) ? 'ew-resize' : 'default';
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (diagDrag) {
+      const [mx] = canvasXY(e.clientX, e.clientY);
+      const newLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
+      splitterChain[diagDrag.idx].cableLen = newLen;
+      _drawDiagram(); return;
+    }
+    if (diagLegDrag) {
+      const [mx] = canvasXY(e.clientX, e.clientY);
+      const newLen = Math.round(Math.max(0, Math.min(500, diagLegDrag.startLen + (mx - diagLegDrag.startX) / PX_PER_FT)));
+      if (!splitterChain[diagLegDrag.i].legLens) splitterChain[diagLegDrag.i].legLens = [];
+      splitterChain[diagLegDrag.i].legLens[diagLegDrag.j] = newLen;
+      _drawDiagram();
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (diagDrag || diagLegDrag) commitDrag();
+  });
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const [mx, my] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
+    const bi = bodyHitTest(mx, my);
+    if (bi >= 0) { diagDrag = { idx: bi, startX: mx, startLen: splitterChain[bi].cableLen ?? 0 }; return; }
+    const lr = legHitTest(mx, my);
+    if (lr) diagLegDrag = { i: lr.i, j: lr.j, startX: mx, startLen: splitterChain[lr.i].legLens?.[lr.j] ?? 0 };
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    if (!diagDrag && !diagLegDrag) return;
+    e.preventDefault();
+    const [mx] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
+    if (diagDrag) {
+      splitterChain[diagDrag.idx].cableLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
+    } else {
+      if (!splitterChain[diagLegDrag.i].legLens) splitterChain[diagLegDrag.i].legLens = [];
+      splitterChain[diagLegDrag.i].legLens[diagLegDrag.j] = Math.round(Math.max(0, Math.min(500, diagLegDrag.startLen + (mx - diagLegDrag.startX) / PX_PER_FT)));
+    }
+    _drawDiagram();
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', () => {
+    if (diagDrag || diagLegDrag) commitDrag();
+  });
 }
 
 /* ----------------------------------------------------------
@@ -109,13 +764,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const sketchLengthSlider = document.getElementById('sketchLength');
   const sketchLengthVal    = document.getElementById('sketchLengthVal');
 
-  /* Length input — clamp to 1000, sync to slider */
+  /* Length input — clamp to 600, sync to slider */
   lengthInput.addEventListener('input', () => {
     let ft = parseFloat(lengthInput.value);
     if (!isNaN(ft) && ft > 0) {
-      if (ft > 1000) {
-        ft = 1000;
-        lengthInput.value = 1000;
+      if (ft > 600) {
+        ft = 600;
+        lengthInput.value = 600;
       }
       sketchLengthSlider.value = ft;
       sketchLengthVal.textContent = ft + ' ft';
@@ -123,9 +778,26 @@ document.addEventListener('DOMContentLoaded', () => {
     updateResults();
   });
 
+  /* Signal level inputs */
+  function clampSigInput(el) {
+    const v = parseFloat(el.value);
+    if (!isNaN(v) && v > 30) el.value = 30;
+    updateSignalLevels();
+  }
+  document.getElementById('sigIn42').addEventListener('input',  () => clampSigInput(document.getElementById('sigIn42')));
+  document.getElementById('sigIn860').addEventListener('input', () => clampSigInput(document.getElementById('sigIn860')));
+
+  /* Preset length buttons */
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      lengthInput.value = btn.dataset.length;
+      lengthInput.dispatchEvent(new Event('input'));
+    });
+  });
+
   /* Custom spin buttons */
   function nudge(delta) {
-    const val = Math.min(1000, Math.max(1, (parseFloat(lengthInput.value) || 0) + delta));
+    const val = Math.min(600, Math.max(1, (parseFloat(lengthInput.value) || 0) + delta));
     lengthInput.value = val;
     lengthInput.dispatchEvent(new Event('input'));
   }
@@ -133,7 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('incrementBtn').addEventListener('click', () => nudge(1));
 
   /* Theme toggle */
-  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+  document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
 
   /* Length slider — drives cable length calculation */
   sketchLengthSlider.addEventListener('input', () => {
@@ -146,6 +818,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Initial render */
   setActiveCable('RG-59');
   updateResults();
+  renderSplitterChain();
 });
 
 /* ----------------------------------------------------------
@@ -158,7 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ctx   = canvas.getContext('2d');
   canvas.height = 110;
 
-  const SPEED = 120;  // px / sec walk speed
+  const SPEEDS = { 'RG-59': 260, 'RG-6': 200, 'RG-11': 140 };
   const PAD_L = 28;   // left padding (wall plate anchor)
   const PAD_R = 14;   // right padding
 
@@ -177,11 +850,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function ftToX(ft) {
-    return PAD_L + ((Math.max(1, Math.min(1000, ft)) - 1) / 999) * trackW();
+    return PAD_L + ((Math.max(1, Math.min(600, ft)) - 1) / 599) * trackW();
   }
 
   function setTarget(ft) {
-    targetFt = Math.max(1, Math.min(1000, +ft || 1));
+    targetFt = Math.max(1, Math.min(600, +ft || 1));
   }
 
   function cssVar(name) {
@@ -301,6 +974,102 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  /* ---- Utility poles ---- */
+  function drawPoles(W, H, gY) {
+    const isDark     = document.documentElement.dataset.theme === 'dark';
+    const poleCol    = isDark ? '#1e2030' : '#7a6550';
+    const armCol     = isDark ? '#252740' : '#6a5540';
+    const insulCol   = isDark ? '#414868' : '#a08060';
+    const wireCol    = isDark ? 'rgba(130,140,180,0.55)' : 'rgba(80,60,40,0.45)';
+    const comWireCol = isDark ? 'rgba(100,120,160,0.40)' : 'rgba(100,80,50,0.35)';
+
+    const POLE_FXS = [0.15, 0.38, 0.61, 0.84];
+    const poleH    = Math.round(gY * 0.62); // how tall above ground
+    const armHW    = 12;                    // half-width of crossarm
+
+    // pre-compute pole tops
+    const poles = POLE_FXS.map(fx => ({ x: Math.round(fx * W), topY: gY - poleH }));
+
+    // --- power wire (top, at crossarm level) ---
+    ctx.strokeStyle = wireCol;
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([]);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < poles.length - 1; i++) {
+      const p1 = poles[i], p2 = poles[i + 1];
+      const wY  = p1.topY + 5;
+      const midX = (p1.x + p2.x) / 2;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, wY);
+      ctx.quadraticCurveTo(midX, wY + 7, p2.x, wY);
+      ctx.stroke();
+    }
+
+    // --- communication line (lower, below crossarm) ---
+    ctx.strokeStyle = comWireCol;
+    ctx.lineWidth   = 0.8;
+    for (let i = 0; i < poles.length - 1; i++) {
+      const p1 = poles[i], p2 = poles[i + 1];
+      const wY  = p1.topY + 18;
+      const midX = (p1.x + p2.x) / 2;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, wY);
+      ctx.quadraticCurveTo(midX, wY + 9, p2.x, wY);
+      ctx.stroke();
+    }
+
+    // --- draw each pole ---
+    poles.forEach(({ x, topY }) => {
+      // shaft
+      ctx.strokeStyle = poleCol;
+      ctx.lineWidth   = 3;
+      ctx.lineCap     = 'butt';
+      ctx.beginPath();
+      ctx.moveTo(x, gY + 2);
+      ctx.lineTo(x, topY);
+      ctx.stroke();
+
+      // crossarm
+      ctx.strokeStyle = armCol;
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - armHW, topY + 4);
+      ctx.lineTo(x + armHW, topY + 4);
+      ctx.stroke();
+
+      // vertical brace under crossarm
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, topY + 4);
+      ctx.lineTo(x - armHW + 4, topY + 10);
+      ctx.moveTo(x, topY + 4);
+      ctx.lineTo(x + armHW - 4, topY + 10);
+      ctx.stroke();
+
+      // insulators on crossarm tips and centre
+      ctx.fillStyle = insulCol;
+      [-armHW, 0, armHW].forEach(ox => {
+        ctx.beginPath();
+        ctx.arc(x + ox, topY + 4, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // night: warm glow from lamp cap
+      if (isDark) {
+        const glow = ctx.createRadialGradient(x, topY - 2, 0, x, topY - 2, 18);
+        glow.addColorStop(0, 'rgba(255,200,80,0.18)');
+        glow.addColorStop(1, 'rgba(255,200,80,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, topY - 2, 18, 0, Math.PI * 2);
+        ctx.fill();
+        // small lamp cap
+        ctx.fillStyle = '#e8c060';
+        ctx.fillRect(x - 3, topY - 5, 6, 3);
+      }
+    });
+  }
+
   /* ---- Sea flower helper (easter egg) ---- */
   function drawSeaFlower(cx, cy, petalColor, s) {
     ctx.fillStyle = petalColor;
@@ -406,10 +1175,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (isMoving) {
       dir = Math.sign(diff);
-      const step = Math.min(SPEED * dt, Math.abs(diff));
+      const step = Math.min(SPEEDS[activeCable] * dt, Math.abs(diff));
       currentX  += dir * step;
       dist      += step;
-      currentFt  = 1 + ((currentX - PAD_L) / trackW()) * 999;
+      currentFt  = 1 + ((currentX - PAD_L) / trackW()) * 599;
     }
 
     drawScene(isMoving);
@@ -425,6 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ctx.clearRect(0, 0, W, H);
     drawBg(W, H, gY);
+    drawPoles(W, H, gY);
 
     /* dashed ground track */
     ctx.save();
@@ -459,9 +1229,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* cable on ground (wall anchor → character feet) */
     if (currentX > PAD_L + 3) {
+      const cableSize = activeCable === 'RG-11' ? 'large' : activeCable === 'RG-6' ? 'medium' : 'small';
+      const shadowW   = cableSize === 'large' ? 10 : cableSize === 'medium' ? 7 : 4;
+      const jacketW   = cableSize === 'large' ?  9 : cableSize === 'medium' ? 6 : 3;
+      const hlW       = cableSize === 'large' ?  2 : cableSize === 'medium' ? 1.5 : 1;
       /* shadow */
       ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-      ctx.lineWidth   = 6;
+      ctx.lineWidth   = shadowW;
       ctx.lineCap     = 'round';
       ctx.beginPath();
       ctx.moveTo(PAD_L, gY + 1);
@@ -469,43 +1243,52 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.stroke();
       /* outer jacket */
       ctx.strokeStyle = '#353a52';
-      ctx.lineWidth   = 5;
+      ctx.lineWidth   = jacketW;
       ctx.beginPath();
       ctx.moveTo(PAD_L, gY - 2);
       ctx.lineTo(currentX - 3, gY - 2);
       ctx.stroke();
       /* highlight stripe */
       ctx.strokeStyle = 'rgba(169,177,214,0.2)';
-      ctx.lineWidth   = 1.5;
+      ctx.lineWidth   = hlW;
       ctx.beginPath();
       ctx.moveTo(PAD_L, gY - 4);
       ctx.lineTo(currentX - 3, gY - 4);
       ctx.stroke();
     }
 
+    if (document.documentElement.dataset.theme === 'dark') easterEgg = false;
+    const struggling = activeCable === 'RG-11' && isMoving;
     if (easterEgg) drawSpongeDude(currentX, gY, dir, frame, isMoving);
-    else           drawDude(currentX, gY, dir, frame, isMoving);
+    else           drawDude(currentX, gY, dir, frame, isMoving, struggling);
   }
 
   /* ---- Character ---- */
-  function drawDude(x, gY, d, frame, moving) {
+  function drawDude(x, gY, d, frame, moving, struggling) {
     const SKIN  = '#dbb889';
-    const HAT   = '#e0af68';
-    const BRIM  = '#b8832a';
-    const SHIRT = '#7aa2f7';
+    const HAT   = '#e8e8e8';
+    const BRIM  = '#c0c0c0';
+    const SHIRT = '#0073D1';
     const PANTS = '#3b4261';
     const SPOOL = '#9d7cd8';
 
-    const legSwing = moving ? 9 : 0;
-    // leg x-offsets: positive = forward (in direction d)
+    // Struggling: heavy stomp, forward lean, arms dragging
+    const legSwing = moving ? (struggling ? 13 : 9) : 0;
+    const lean     = struggling ? 5 * d : 0;          // body leans forward
+    const hunchY   = struggling ? 4 : 0;              // head/body droops down
+    const bob      = struggling ? Math.sin(dist / 6) * 2 : 0; // heavy up-down bob
+
     const l1x = (frame === 0 ? -1 :  1) * legSwing * d;
     const l2x = (frame === 0 ?  1 : -1) * legSwing * d;
-    // arms swing opposite to same-side leg
-    const a1x = -l1x * 0.55;
-    const a2x = -l2x * 0.55;
+    // arms hang low and drag when struggling
+    const a1x = struggling ? -d * 4 : -l1x * 0.55;
+    const a2x = struggling ? -d * 4 : -l2x * 0.55;
+    const aYOff = struggling ? 6 : 0;
 
     ctx.lineCap  = 'round';
     ctx.lineJoin = 'round';
+
+    const yOff = bob;
 
     /* ground shadow */
     ctx.fillStyle = 'rgba(0,0,0,0.12)';
@@ -516,24 +1299,22 @@ document.addEventListener('DOMContentLoaded', () => {
     /* legs */
     ctx.strokeStyle = PANTS;
     ctx.lineWidth   = 5;
-    ctx.beginPath(); ctx.moveTo(x - 3, gY - 14); ctx.lineTo(x - 3 + l1x, gY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x + 3, gY - 14); ctx.lineTo(x + 3 + l2x, gY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 3 + lean, gY - 14 + yOff); ctx.lineTo(x - 3 + l1x, gY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 3 + lean, gY - 14 + yOff); ctx.lineTo(x + 3 + l2x, gY); ctx.stroke();
 
     /* body (shirt) */
     ctx.fillStyle = SHIRT;
-    ctx.fillRect(x - 7, gY - 28, 14, 14);
+    ctx.fillRect(x - 7 + lean, gY - 28 + hunchY + yOff, 14, 14);
 
     /* spool on back (opposite to direction of travel) */
-    const sx = x - 11 * d;
-    const sy = gY - 23;
+    const sx = x - 11 * d + lean;
+    const sy = gY - 23 + hunchY + yOff;
     ctx.strokeStyle = SPOOL;
     ctx.lineWidth   = 2.5;
     ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.stroke();
-    /* flanges */
     ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(sx - 5, sy - 2); ctx.lineTo(sx - 5, sy + 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(sx + 5, sy - 2); ctx.lineTo(sx + 5, sy + 2); ctx.stroke();
-    /* hub spokes */
     ctx.strokeStyle = SPOOL;
     ctx.lineWidth   = 1.2;
     ctx.beginPath();
@@ -544,28 +1325,40 @@ document.addEventListener('DOMContentLoaded', () => {
     /* arms */
     ctx.strokeStyle = SHIRT;
     ctx.lineWidth   = 4;
-    ctx.beginPath(); ctx.moveTo(x - 7 * d, gY - 23); ctx.lineTo(x - 7 * d + a1x, gY - 13); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x + 7 * d, gY - 23); ctx.lineTo(x + 7 * d + a2x, gY - 13); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 7 * d + lean, gY - 23 + hunchY + yOff); ctx.lineTo(x - 7 * d + lean + a1x, gY - 13 + hunchY + aYOff + yOff); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 7 * d + lean, gY - 23 + hunchY + yOff); ctx.lineTo(x + 7 * d + lean + a2x, gY - 13 + hunchY + aYOff + yOff); ctx.stroke();
 
-    /* head */
+    /* head — droops forward when struggling */
+    const hx = x + lean * 0.6;
+    const hy = gY - 35 + hunchY + yOff;
     ctx.fillStyle = SKIN;
-    ctx.beginPath(); ctx.arc(x, gY - 35, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.fill();
 
-    /* hard hat dome (upper semicircle) */
+    /* hard hat */
     ctx.fillStyle = HAT;
     ctx.beginPath();
-    ctx.arc(x, gY - 41, 9, Math.PI, 0, true);
+    ctx.arc(hx, hy - 4, 9, Math.PI, 0, false);
     ctx.closePath();
     ctx.fill();
-    /* brim */
     ctx.fillStyle = BRIM;
-    ctx.fillRect(x - 12, gY - 42, 24, 3);
+    ctx.fillRect(hx - 12, hy - 5, 24, 3);
 
-    /* eye — on the face side (direction of travel) */
+    /* eye */
     ctx.fillStyle = '#1a1b26';
     ctx.beginPath();
-    ctx.arc(x + 4 * d, gY - 36, 1.5, 0, Math.PI * 2);
+    ctx.arc(hx + 4 * d, hy + 1, 1.5, 0, Math.PI * 2);
     ctx.fill();
+
+    /* effort squiggle lines when struggling */
+    if (struggling) {
+      ctx.strokeStyle = 'rgba(247,118,142,0.75)';
+      ctx.lineWidth   = 1.2;
+      ctx.lineCap     = 'round';
+      const ex = hx - d * 10;
+      const ey = hy - 10;
+      ctx.beginPath(); ctx.moveTo(ex,     ey);      ctx.lineTo(ex + 4, ey - 3); ctx.lineTo(ex + 2, ey - 6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ex + 6, ey + 1);  ctx.lineTo(ex + 9, ey - 2); ctx.lineTo(ex + 7, ey - 5); ctx.stroke();
+    }
   }
 
   /* ---- Sponge character (easter egg) ---- */
@@ -641,46 +1434,38 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.fillRect(x - 9, gY - 48, 18, 15);
     /* head pores */
     ctx.fillStyle = DARK_Y;
-    [[x-4,gY-45,1.5],[x+4,gY-44,1.2],[x-3,gY-39,1.3],[x+5,gY-41,1.1]].forEach(([hx,hy,hr]) => {
+    [[x-3,gY-39,1.3],[x+5,gY-41,1.1]].forEach(([hx,hy,hr]) => {
       ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI*2); ctx.fill();
     });
 
-    /* big oval eyes — wide apart, fully open, no eyelid lines */
+    /* wide ellipse eyes */
     ctx.fillStyle = WHITE;
     ctx.beginPath(); ctx.ellipse(x - 4.5, gY - 42, 4.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(x + 4.5, gY - 42, 4.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
-    /* irises */
-    ctx.fillStyle = IRIS;
-    ctx.beginPath(); ctx.arc(x - 4.5 + d * 0.5, gY - 43, 2.8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 4.5 + d * 0.5, gY - 43, 2.8, 0, Math.PI * 2); ctx.fill();
     /* pupils */
     ctx.fillStyle = PUPIL;
-    ctx.beginPath(); ctx.arc(x - 4.5 + d * 0.8, gY - 43, 1.4, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 4.5 + d * 0.8, gY - 43, 1.4, 0, Math.PI * 2); ctx.fill();
-    /* rosy cheeks */
-    ctx.fillStyle = 'rgba(255,110,110,0.32)';
-    ctx.beginPath(); ctx.ellipse(x - 7.5, gY - 38, 3.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(x + 7.5, gY - 38, 3.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x - 4.5 + d * 0.6, gY - 42, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 4.5 + d * 0.6, gY - 42, 2, 0, Math.PI * 2); ctx.fill();
 
-    /* big wide smile */
-    ctx.strokeStyle = PUPIL; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    /* gentle smile */
+    ctx.strokeStyle = PUPIL; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(x - 6, gY - 37);
-    ctx.quadraticCurveTo(x, gY - 31, x + 6, gY - 37);
+    ctx.moveTo(x - 4, gY - 39);
+    ctx.quadraticCurveTo(x, gY - 36, x + 4, gY - 39);
     ctx.stroke();
 
-    /* buck teeth (inside the smile) */
+    /* buck teeth */
     ctx.fillStyle = WHITE;
-    ctx.fillRect(x - 3,   gY - 37, 2.5, 3);
-    ctx.fillRect(x + 0.5, gY - 37, 2.5, 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.5;
-    ctx.strokeRect(x - 3,   gY - 37, 2.5, 3);
-    ctx.strokeRect(x + 0.5, gY - 37, 2.5, 3);
+    ctx.fillRect(x - 2.5, gY - 39, 1.8, 2);
+    ctx.fillRect(x + 0.5, gY - 39, 1.8, 2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 0.4;
+    ctx.strokeRect(x - 2.5, gY - 39, 1.8, 2);
+    ctx.strokeRect(x + 0.5, gY - 39, 1.8, 2);
 
-    /* hard hat — yellow with yellow brim */
-    ctx.fillStyle = '#f0b800';
-    ctx.beginPath(); ctx.arc(x, gY - 50, 9, Math.PI, 0, true); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#c89000';
+    /* hard hat — white with light grey brim */
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath(); ctx.arc(x, gY - 50, 9, Math.PI, 0, false); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#c0c0c0';
     ctx.fillRect(x - 12, gY - 51, 24, 3);
   }
 
