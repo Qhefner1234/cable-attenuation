@@ -156,39 +156,60 @@ function computeChain() {
   const in860 = parseFloat(document.getElementById('sigIn860').value);
   if (isNaN(in42) || isNaN(in860)) return null;
 
-  const att42  = interpolateAttenuation(activeCable, 42);
-  const att860 = interpolateAttenuation(activeCable, 860);
-
   const results = [];
   for (let i = 0; i < splitterChain.length; i++) {
-    const def      = SPLITTERS[splitterChain[i].type];
-    const cableLen = splitterChain[i].cableLen ?? 0;
+    const item      = splitterChain[i];
+    const def       = SPLITTERS[item.type];
+    const cableLen  = item.cableLen ?? 0;
+    const cableType = item.cableType ?? activeCable;
+    const att42     = interpolateAttenuation(cableType, 42);
+    const att860    = interpolateAttenuation(cableType, 860);
+
     let src42, src860;
     if (i === 0) {
       src42 = in42; src860 = in860;
     } else {
       const prev = results[i - 1];
-      const leg  = prev.legs[splitterChain[i].fromLeg];
+      const leg  = prev.legs[item.fromLeg];
       src42  = leg.out42;
       src860 = leg.out860;
     }
-    // Apply cable run attenuation before this splitter
+    // Apply input cable attenuation before this splitter
     src42  = +(src42  - att42  * cableLen / 100).toFixed(2);
     src860 = +(src860 - att860 * cableLen / 100).toFixed(2);
 
     results.push({
-      in42: src42, in860: src860, cableLen,
+      in42: src42, in860: src860, cableLen, cableType,
       legs: def.legs.map((leg, j) => {
-        const legLen = splitterChain[i].legLens?.[j] ?? 0;
+        const legLen       = item.legLens?.[j] ?? 0;
+        const legCableType = item.legCableTypes?.[j] ?? activeCable;
+        const latt42  = interpolateAttenuation(legCableType, 42);
+        const latt860 = interpolateAttenuation(legCableType, 860);
         return {
           label:  leg.label,
-          out42:  +(src42  - leg.loss42  - att42  * legLen / 100).toFixed(1),
-          out860: +(src860 - leg.loss860 - att860 * legLen / 100).toFixed(1),
+          out42:  +(src42  - leg.loss42  - latt42  * legLen / 100).toFixed(1),
+          out860: +(src860 - leg.loss860 - latt860 * legLen / 100).toFixed(1),
         };
       }),
     });
   }
   return results;
+}
+
+function _makeCableSelect(currentType, onChange) {
+  const group = document.createElement('div');
+  group.className = 'sp-cable-btn-group';
+  Object.keys(ATTENUATION).forEach(k => {
+    const btn = document.createElement('button');
+    btn.className = 'sp-cable-btn' + (k === currentType ? ' active' : '');
+    btn.textContent = k;
+    btn.addEventListener('click', () => {
+      group.querySelectorAll('.sp-cable-btn').forEach(b => b.classList.toggle('active', b === btn));
+      onChange(k);
+    });
+    group.appendChild(btn);
+  });
+  return group;
 }
 
 function renderSplitterChain() {
@@ -213,6 +234,19 @@ function renderSplitterChain() {
       `<button class="sp-remove-btn" data-idx="${idx}" title="Remove this and subsequent splitters">✕</button>`;
     block.appendChild(hdr);
 
+    // Input cable type row
+    const inputCableRow = document.createElement('div');
+    inputCableRow.className = 'sp-input-cable-row';
+    const inputCableLabel = document.createElement('span');
+    inputCableLabel.className = 'sp-input-cable-label';
+    inputCableLabel.textContent = 'Input cable';
+    inputCableRow.appendChild(inputCableLabel);
+    inputCableRow.appendChild(_makeCableSelect(item.cableType ?? activeCable, val => {
+      item.cableType = val;
+      renderSplitterChain(); renderTreeDiagram();
+    }));
+    block.appendChild(inputCableRow);
+
     // Legs
     const legsEl = document.createElement('div');
     legsEl.className = 'sp-legs';
@@ -229,6 +263,14 @@ function renderSplitterChain() {
       labelEl.className = 'sp-leg-label';
       labelEl.textContent = leg.label;
       row.appendChild(labelEl);
+
+      // Cable type for this leg
+      const legCableType = item.legCableTypes?.[li] ?? activeCable;
+      row.appendChild(_makeCableSelect(legCableType, val => {
+        if (!item.legCableTypes) item.legCableTypes = new Array(SPLITTERS[item.type].legs.length).fill(activeCable);
+        item.legCableTypes[li] = val;
+        renderSplitterChain(); renderTreeDiagram();
+      }));
 
       // Cable length input for this leg
       const cableWrap = document.createElement('span');
@@ -289,7 +331,7 @@ function renderSplitterChain() {
       btn.className = 'sp-type-btn';
       btn.textContent = def.label;
       btn.addEventListener('click', () => {
-        splitterChain.push({ type: key, fromLeg: pendingFromLeg, cableLen: 50, legLens: new Array(SPLITTERS[key].legs.length).fill(0) });
+        splitterChain.push({ type: key, fromLeg: pendingFromLeg, cableLen: 50, cableType: activeCable, legLens: new Array(SPLITTERS[key].legs.length).fill(0), legCableTypes: new Array(SPLITTERS[key].legs.length).fill(activeCable) });
         pendingFromLeg = null;
         renderSplitterChain();
         renderTreeDiagram();
@@ -760,6 +802,22 @@ function setActiveCable(cable) {
    ---------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   restoreTheme();
+
+  /* Tab navigation */
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === target);
+        b.setAttribute('aria-selected', b.dataset.tab === target);
+      });
+      document.querySelectorAll('.tab-page').forEach(page => {
+        page.hidden = page.id !== `page-${target}`;
+      });
+      // Redraw diagram when switching to splitter tab so canvas sizes correctly
+      if (target === 'splitter') renderTreeDiagram();
+    });
+  });
 
   /* Cable buttons */
   document.querySelectorAll('.cable-btn').forEach(btn => {

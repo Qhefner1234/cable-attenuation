@@ -32,9 +32,15 @@
     <span class="info-topbar-item">RG-11: <span class="info-topbar-val">0.36 / 3.29 / 4.71</span></span>
   </div>
 
+  <nav class="tab-nav" role="tablist">
+    <button class="tab-btn active" data-tab="attenuation" role="tab" aria-selected="true">Cable Attenuation</button>
+    <button class="tab-btn" data-tab="splitter" role="tab" aria-selected="false">Splitter Analysis</button>
+  </nav>
+
   <main class="main-layout">
 
-    <!-- ══ TOP: Cable run ══ -->
+    <!-- ══ PAGE: Cable Attenuation ══ -->
+    <div class="tab-page" id="page-attenuation">
     <div class="run-section">
 
       <aside class="panel panel-controls">
@@ -137,14 +143,10 @@
       </div>
     </div>
 
-    <!-- ══ DIVIDER ══ -->
-    <div class="section-divider">
-      <div class="divider-line"></div>
-      <span class="divider-label">Splitter Analysis</span>
-      <div class="divider-line"></div>
-    </div>
+    </div><!-- /page-attenuation -->
 
-    <!-- ══ BOTTOM: Splitter analysis ══ -->
+    <!-- ══ PAGE: Splitter Analysis ══ -->
+    <div class="tab-page" id="page-splitter" hidden>
     <div class="splitter-section">
 
       <aside class="panel panel-controls">
@@ -197,6 +199,7 @@
         <div class="panel panel-tree" id="panelTree">
           <h2 class="section-label">Signal Path</h2>
           <div class="tree-scroll" id="treeDiagram"></div>
+          <p class="diagram-scroll-hint">swipe to scroll · drag splitters to set cable length</p>
         </div>
 
         <div class="panel panel-chain">
@@ -206,6 +209,7 @@
       </div>
 
     </div>
+    </div><!-- /page-splitter -->
 
   </main>
 

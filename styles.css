@@ -288,6 +288,19 @@ html[data-theme="light"] .icon-moon { display: block; }
   min-width: 0;
 }
 
+.diagram-scroll-hint {
+  display: none;
+  font-size: 0.625rem;
+  color: var(--fg-muted);
+  text-align: center;
+  opacity: 0.5;
+  margin-top: 0.4rem;
+}
+
+@media (pointer: coarse) {
+  .diagram-scroll-hint { display: block; }
+}
+
 .panel-tree {
   overflow: hidden;
   display: flex;
@@ -514,6 +527,48 @@ html[data-theme="light"] .icon-moon { display: block; }
   background: var(--accent-glow);
 }
 
+/* ----------------------------------------------------------
+   Tab Navigation
+   ---------------------------------------------------------- */
+.tab-nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 2rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.tab-btn {
+  padding: 0.5rem 1.25rem;
+  background: var(--bg-highlight);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--fg-muted);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tab-page[hidden] { display: none; }
+
 /* Subtle info top bar */
 .info-topbar {
   display: flex;
@@ -694,6 +749,49 @@ html[data-theme="light"] .icon-moon { display: block; }
 .sp-leg:last-child { border-bottom: none; }
 
 .sp-leg-selected { background: var(--accent-glow); }
+
+.sp-input-cable-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.625rem 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sp-input-cable-label {
+  font-size: 0.6875rem;
+  color: var(--fg-muted);
+  flex: 1;
+}
+
+.sp-cable-btn-group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.sp-cable-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.6875rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.sp-cable-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sp-cable-btn:hover:not(.active) {
+  border-color: var(--border);
+  color: var(--fg);
+}
 
 .sp-leg-cable {
   display: flex;
@@ -1120,73 +1218,146 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 @media (max-width: 600px) {
+  /* ── Tabs ── */
+  .tab-nav {
+    padding: 0 1rem;
+  }
+
+  .tab-btn {
+    padding: 0.65rem 1rem;
+    font-size: 0.8125rem;
+    flex: 1;
+    text-align: center;
+  }
+
+  /* ── Layout ── */
   .run-section,
   .splitter-section {
     padding: 1rem 1rem 0.75rem;
     gap: 1rem;
   }
 
-  .section-divider {
-    padding: 0 1rem;
-  }
+  .section-divider { padding: 0 1rem; }
 
-  .result-cards {
-    grid-template-columns: 1fr;
-  }
+  .result-cards { grid-template-columns: 1fr; }
+  .result-num   { font-size: 1.75rem; }
+  .panel-dude   { display: none; }
 
-  .result-num {
-    font-size: 1.75rem;
-  }
-
-  /* Hide cable dude on small screens to save space */
-  .panel-dude {
-    display: none;
-  }
-
-  /* Bigger touch targets for preset / type / connect buttons */
-  .preset-btn,
-  .sp-type-btn {
+  /* ── Cable attenuation controls ── */
+  .preset-btn {
     padding: 0.55rem 0.5rem;
     font-size: 0.75rem;
   }
 
-  .sp-connect-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 1rem;
+  .sig-input  { font-size: 1rem; }
+  .spin-btn   { min-width: 40px; }
+
+  /* ── Signal path diagram ── */
+  .tree-scroll {
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 0.5rem;
+    position: relative;
   }
+
+  /* ── Splitter type picker ── */
+  .sp-type-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .sp-type-btn {
+    padding: 0.65rem 0.5rem;
+    font-size: 0.8125rem;
+    text-align: center;
+  }
+
+  /* ── Splitter block header ── */
+  .sp-block-header {
+    padding: 0.6rem 0.75rem;
+    gap: 0.4rem;
+  }
+
+  .sp-block-label { font-size: 0.875rem; }
 
   .sp-remove-btn {
-    padding: 0.4rem 0.5rem;
-    font-size: 1rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 1.1rem;
+    margin-left: auto;
   }
 
-  /* Stack splitter leg row: label on top, cable+vals below */
-  .sp-leg {
+  /* ── Input cable row ── */
+  .sp-input-cable-row {
     flex-wrap: wrap;
-    gap: 0.25rem 0.5rem;
-    padding: 0.5rem 0.625rem;
+    padding: 0.4rem 0.75rem;
+    gap: 0.4rem;
   }
 
-  .sp-leg-label {
+  .sp-input-cable-label {
     width: 100%;
-    flex: none;
+    font-size: 0.75rem;
+  }
+
+  /* ── Cable type buttons (inside chain) ── */
+  .sp-cable-btn {
+    padding: 0.35rem 0.55rem;
+    font-size: 0.75rem;
+  }
+
+  /* ── Leg rows: grid layout for clarity ── */
+  .sp-leg {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    row-gap: 0.45rem;
+    column-gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .sp-leg:last-child { border-bottom: none; }
+
+  /* Row 1: loss label (left) + output values (right) */
+  .sp-leg-label {
+    grid-column: 1; grid-row: 1;
+    width: auto; flex: none;
+    font-size: 0.75rem;
+    align-self: center;
+  }
+
+  .sp-leg-vals {
+    grid-column: 2; grid-row: 1;
+    align-self: center;
+  }
+
+  .sp-leg-val  { font-size: 0.8125rem; }
+
+  /* Row 2: cable type buttons (left) + ft input (right) */
+  .sp-leg .sp-cable-btn-group {
+    grid-column: 1; grid-row: 2;
+    align-self: center;
+  }
+
+  .sp-leg-cable {
+    grid-column: 2; grid-row: 2;
+    align-self: center;
+    justify-self: end;
   }
 
   .sp-leg-len {
     width: 3.5rem;
-    padding: 0.25rem 0.4rem;
-    font-size: 0.75rem;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.8125rem;
   }
 
-  /* Larger signal-level inputs */
-  .sig-input {
-    font-size: 1rem;
-  }
-
-  /* Spin buttons easier to tap */
-  .spin-btn {
-    min-width: 40px;
+  /* Connect btn overlaps row 1 right when present — push vals up */
+  .sp-connect-btn {
+    grid-column: 2; grid-row: 1;
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    justify-self: end;
   }
 }
 
