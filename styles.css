@@ -1321,44 +1321,45 @@ html[data-theme="light"] .icon-moon { display: block; }
     font-size: 0.75rem;
   }
 
-  /* ── Leg rows: grid layout for clarity ── */
+  /* ── Leg rows: two clearly separated lines using flex-wrap ── */
   .sp-leg {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
-    row-gap: 0.45rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 0.5rem;
     column-gap: 0.5rem;
-    padding: 0.6rem 0.75rem;
+    padding: 0.65rem 0.75rem;
     border-bottom: 1px solid var(--border-subtle);
   }
 
   .sp-leg:last-child { border-bottom: none; }
 
-  /* Row 1: loss label (left) + output values (right) */
+  /* Line 1: label takes all remaining space, vals pins to the right */
   .sp-leg-label {
-    grid-column: 1; grid-row: 1;
-    width: auto; flex: none;
+    order: 1;
+    flex: 1;
+    min-width: 80px;
+    width: auto;
     font-size: 0.75rem;
-    align-self: center;
   }
 
   .sp-leg-vals {
-    grid-column: 2; grid-row: 1;
-    align-self: center;
+    order: 2;
+    flex-shrink: 0;
   }
 
   .sp-leg-val  { font-size: 0.8125rem; }
 
-  /* Row 2: cable type buttons (left) + ft input (right) */
+  /* Line 2: cable buttons fill left, ft input pins to the right */
   .sp-leg .sp-cable-btn-group {
-    grid-column: 1; grid-row: 2;
-    align-self: center;
+    order: 3;
+    flex: 1;
   }
 
   .sp-leg-cable {
-    grid-column: 2; grid-row: 2;
-    align-self: center;
-    justify-self: end;
+    order: 4;
+    flex-shrink: 0;
+    margin-left: auto;
   }
 
   .sp-leg-len {
@@ -1367,13 +1368,13 @@ html[data-theme="light"] .icon-moon { display: block; }
     font-size: 0.8125rem;
   }
 
-  /* Connect btn overlaps row 1 right when present — push vals up */
+  /* Connect btn: same line as label, right side */
   .sp-connect-btn {
-    grid-column: 2; grid-row: 1;
+    order: 2;
+    flex-shrink: 0;
     width: 36px;
     height: 36px;
     font-size: 1.1rem;
-    justify-self: end;
   }
 }
 
