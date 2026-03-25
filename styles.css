@@ -1252,13 +1252,16 @@ html[data-theme="light"] .icon-moon { display: block; }
   .sig-input  { font-size: 1rem; }
   .spin-btn   { min-width: 40px; }
 
-  /* ── Signal path diagram ── */
+  /* ── Signal path diagram — vertical mode on mobile ── */
   .tree-scroll {
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
     padding: 0.5rem;
     position: relative;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
+  .tree-scroll canvas { max-width: 100%; }
 
   /* ── Splitter type picker ── */
   .sp-type-picker {

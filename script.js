@@ -58,10 +58,11 @@ let pendingFromLeg = null;
 
 // Diagram drag state
 let diagCanvas    = null;
-let diagDrag      = null;   // { idx, startX, startLen }  — splitter body drag
+let diagDrag      = null;   // { idx, startX, startY, startLen }  — splitter body drag
 let diagLegDrag   = null;   // { i, j, startX, startLen } — terminal leg drag
 let diagBodyRects = [];     // [{ x, topY, botY }]  one per splitter body
 let diagLegRects  = [];     // [{ i, j, x, y, w, h }]  one per terminal leg val box
+let diagVertical  = false;  // true when drawing in vertical (mobile) mode
 
 // Diagram layout constants
 const PX_PER_FT  = 2.5;   // pixels per foot of cable
@@ -386,6 +387,12 @@ function _drawDiagram() {
   const canvas = diagCanvas;
   if (!canvas) return;
 
+  // Detect narrow containers — switch to vertical layout on mobile
+  const container = canvas.parentElement;
+  const containerW = container ? container.clientWidth : 600;
+  diagVertical = containerW < 540;
+  if (diagVertical) { _drawDiagramVertical(); return; }
+
   const in42  = parseFloat(document.getElementById('sigIn42').value);
   const in860 = parseFloat(document.getElementById('sigIn860').value);
   const in42Str  = isNaN(in42)  ? '—' : String(in42);
@@ -652,6 +659,244 @@ function _drawDiagram() {
   }
 }
 
+function _drawDiagramVertical() {
+  const canvas = diagCanvas;
+  if (!canvas) return;
+
+  const container = canvas.parentElement;
+  const containerW = container ? Math.max(280, container.clientWidth) : 320;
+
+  const in42     = parseFloat(document.getElementById('sigIn42').value);
+  const in860    = parseFloat(document.getElementById('sigIn860').value);
+  const in42Str  = isNaN(in42)  ? '—' : String(in42);
+  const in860Str = isNaN(in860) ? '—' : String(in860);
+
+  const cs      = getComputedStyle(document.documentElement);
+  const accent  = cs.getPropertyValue('--accent').trim();
+  const muted   = cs.getPropertyValue('--fg-muted').trim();
+  const dim     = cs.getPropertyValue('--fg-dim').trim();
+  const hiColor = cs.getPropertyValue('--bg-highlight').trim();
+  const border  = cs.getPropertyValue('--border-subtle').trim();
+  const cyan    = cs.getPropertyValue('--cyan').trim();
+  const dpr     = window.devicePixelRatio || 1;
+
+  const computed = computeChain();
+
+  // Layout constants
+  const PAD_Y    = 10;
+  const PAD_X    = 8;
+  const SRC_W    = Math.min(130, containerW - 24);
+  const SRC_H    = 44;
+  const SPINE_X  = 18;         // vertical spine x
+  const BODY_W   = 14;         // body width (narrow vertical bar)
+  const BODY_PAD = 8;
+  const LEG_GAP  = 34;         // vertical spacing between legs
+  const VAL_W    = Math.min(100, containerW - SPINE_X - 7 - 4 - 8 - PAD_X - 4);
+  const VAL_H    = 26;
+  const PORT_X   = SPINE_X + BODY_W / 2;   // port dot x
+  const LEG_START_X = PORT_X + 4;          // where terminal legs begin
+  const MAX_LEG_PX = containerW - LEG_START_X - 8 - VAL_W - PAD_X;
+
+  diagBodyRects = [];
+  diagLegRects  = [];
+
+  // ── No splitters yet ───────────────────────────────────────────
+  if (splitterChain.length === 0) {
+    const W = containerW, H = 100;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+    // Source box
+    const sx = PAD_X, sy = PAD_Y;
+    ctx.beginPath(); ctx.roundRect(sx, sy, SRC_W, SRC_H, 7);
+    ctx.fillStyle = hiColor; ctx.fill();
+    ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '400 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = muted; ctx.fillText('SOURCE', sx + SRC_W / 2, sy + 12);
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = accent; ctx.fillText(`${in42Str} / ${in860Str}`, sx + SRC_W / 2, sy + 26);
+    ctx.font = '400 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = muted; ctx.fillText('dBmV', sx + SRC_W / 2, sy + 38);
+    // Dashed line downward + hint
+    ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.35;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(SPINE_X, sy + SRC_H); ctx.lineTo(SPINE_X, sy + SRC_H + 36); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.font = '400 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = muted; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('add a splitter', SPINE_X + 8, sy + SRC_H + 18);
+    return;
+  }
+
+  // ── Compute splitter positions ─────────────────────────────────
+  const contLegs = splitterChain.map((_, i) =>
+    i < splitterChain.length - 1 ? splitterChain[i + 1].fromLeg : -1
+  );
+
+  const splitterInfos = [];
+  let curY = PAD_Y + SRC_H + 6;   // spine starts below source box
+
+  for (let i = 0; i < splitterChain.length; i++) {
+    const item = splitterChain[i];
+    const def  = SPLITTERS[item.type];
+    const n    = def.legs.length;
+    const cl   = contLegs[i];
+    const cLen = item.cableLen ?? 0;
+
+    const bodyTop = curY + Math.max(MIN_GAP_PX, cLen * PX_PER_FT);
+    const legYs   = Array.from({ length: n }, (_, j) => bodyTop + BODY_PAD + j * LEG_GAP);
+    const bodyBot = legYs[n - 1] + BODY_PAD;
+
+    splitterInfos.push({ bodyTop, bodyBot, legYs, cl, n });
+    curY = bodyBot + 4;
+  }
+
+  const canvasH = curY + PAD_Y + 10;
+  const canvasW = containerW;
+
+  canvas.width  = canvasW * dpr;
+  canvas.height = canvasH * dpr;
+  canvas.style.width  = canvasW + 'px';
+  canvas.style.height = canvasH + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Drawing helpers
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+  function dtxt(x, y, str, size, color, align, bold) {
+    ctx.font = `${bold ? 600 : 400} ${size}px "JetBrains Mono", monospace`;
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle';
+    ctx.fillText(str, x, y);
+  }
+  function dline(x1, y1, x2, y2, color, w, alpha, dash) {
+    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.globalAlpha = alpha;
+    if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+
+  // Source box
+  const srcX = PAD_X, srcY = PAD_Y;
+  rr(srcX, srcY, SRC_W, SRC_H, 7);
+  ctx.fillStyle = hiColor; ctx.fill();
+  ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.globalAlpha = 1; ctx.stroke();
+  dtxt(srcX + SRC_W / 2, srcY + 12, 'SOURCE', 8, muted, 'center', false);
+  dtxt(srcX + SRC_W / 2, srcY + 26, `${in42Str} / ${in860Str}`, 11, accent, 'center', true);
+  dtxt(srcX + SRC_W / 2, srcY + 38, 'dBmV', 8, muted, 'center', false);
+
+  // Spine from source → first body
+  const firstBodyTop = splitterInfos[0].bodyTop;
+  dline(SPINE_X, srcY + SRC_H, SPINE_X, firstBodyTop, accent, 2.5, 0.9);
+  _drawCableLabelV(ctx, srcY + SRC_H, firstBodyTop, SPINE_X + 8,
+    splitterChain[0].cableLen ?? 0, muted, accent, diagDrag?.idx === 0);
+
+  // Draw each splitter
+  for (let i = 0; i < splitterChain.length; i++) {
+    const { bodyTop, bodyBot, legYs, cl, n } = splitterInfos[i];
+    const item       = splitterChain[i];
+    const def        = SPLITTERS[item.type];
+    const res        = computed ? computed[i] : null;
+    const isDragging = diagDrag?.idx === i;
+
+    diagBodyRects.push({ x: SPINE_X, topY: bodyTop, botY: bodyBot });
+
+    // Body (vertical bar on spine)
+    rr(SPINE_X - BODY_W / 2, bodyTop, BODY_W, bodyBot - bodyTop, 4);
+    ctx.fillStyle = hiColor; ctx.fill();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = isDragging ? 2.5 : 1.5; ctx.globalAlpha = 0.95; ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Label right of body
+    const lx = SPINE_X + BODY_W / 2 + 6;
+    const ly = (bodyTop + bodyBot) / 2;
+    if (isDragging) {
+      dtxt(lx, ly - 12, '▲  ▼', 9, accent, 'left', false);
+      dtxt(lx, ly + 2,  def.label, 8, accent, 'left', true);
+    } else {
+      dtxt(lx, ly - (res ? 5 : 0), def.label, 8, muted, 'left', true);
+      if (res) dtxt(lx, ly + 8, `${res.in42}/${res.in860} dBmV`, 7, muted, 'left', false);
+    }
+
+    // Vertical trunk on right side of body connecting all port dots
+    if (n > 1) dline(PORT_X, legYs[0], PORT_X, legYs[n - 1], accent, 2, 0.75);
+
+    // Port dots
+    legYs.forEach(ly => {
+      ctx.beginPath(); ctx.arc(PORT_X, ly, 3, 0, Math.PI * 2);
+      ctx.fillStyle = accent; ctx.globalAlpha = 0.9; ctx.fill(); ctx.globalAlpha = 1;
+    });
+
+    // Legs
+    for (let j = 0; j < n; j++) {
+      const legAbsY   = legYs[j];
+      const isCont    = j === cl && i < splitterChain.length - 1;
+      const legDef    = def.legs[j];
+      const legRes    = res ? res.legs[j] : null;
+      const isDragLeg = diagLegDrag?.i === i && diagLegDrag?.j === j;
+
+      if (isCont) {
+        // Continuing leg: tiny right stub just to show port, spine continues below body
+        dline(PORT_X, legAbsY, PORT_X + 6, legAbsY, accent, 2, 0.5);
+      } else {
+        // Terminal leg: stub right then dashed line to val box
+        const legLen = item.legLens?.[j] ?? 0;
+        const legPx  = Math.min(legLen * PX_PER_FT, MAX_LEG_PX);
+        const stubEnd = LEG_START_X;
+        const bx      = stubEnd + 6 + Math.max(0, legPx);
+
+        dline(PORT_X, legAbsY, stubEnd, legAbsY, accent, 2, 0.75);
+        dline(stubEnd, legAbsY, bx, legAbsY, dim, isDragLeg ? 2 : 1.8, isDragLeg ? 0.9 : 0.6, [4, 3]);
+
+        if (legLen > 0 || isDragLeg) {
+          ctx.font = `${isDragLeg ? 700 : 400} 7.5px "JetBrains Mono", monospace`;
+          ctx.fillStyle = isDragLeg ? accent : muted;
+          ctx.globalAlpha = isDragLeg ? 1 : 0.55;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(`${legLen} ft`, (stubEnd + bx) / 2, legAbsY - 8);
+          ctx.globalAlpha = 1;
+        }
+
+        diagLegRects.push({ i, j, x: bx, y: legAbsY - VAL_H / 2, w: VAL_W, h: VAL_H });
+        rr(bx, legAbsY - VAL_H / 2, VAL_W, VAL_H, 5);
+        ctx.fillStyle = hiColor; ctx.fill();
+        ctx.strokeStyle = isDragLeg ? accent : border;
+        ctx.lineWidth = isDragLeg ? 2 : 1.2; ctx.stroke();
+
+        if (isDragLeg) {
+          dtxt(bx + VAL_W / 2, legAbsY, '◀  ▶', 9, accent, 'center', false);
+        } else {
+          dtxt(bx + VAL_W / 2, legAbsY - 7, legDef.label, 6.5, muted, 'center', false);
+          dtxt(bx + VAL_W / 2, legAbsY + 7, legRes ? `${legRes.out42}/${legRes.out860} dBmV` : '—', 8, cyan, 'center', true);
+        }
+      }
+    }
+
+    // Spine continues from body bottom to next splitter
+    if (i < splitterChain.length - 1) {
+      const nextBodyTop = splitterInfos[i + 1].bodyTop;
+      dline(SPINE_X, bodyBot, SPINE_X, nextBodyTop, accent, 2.5, 0.9);
+      _drawCableLabelV(ctx, bodyBot, nextBodyTop, SPINE_X + 8,
+        splitterChain[i + 1].cableLen ?? 0, muted, accent, diagDrag?.idx === i + 1);
+    }
+  }
+}
+
+function _drawCableLabelV(ctx, y1, y2, x, cableLen, muted, accent, isActive) {
+  const midY = (y1 + y2) / 2;
+  ctx.font = `${isActive ? 700 : 400} 8px "JetBrains Mono", monospace`;
+  ctx.fillStyle = isActive ? accent : muted;
+  ctx.globalAlpha = isActive ? 1 : 0.55;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText(`${cableLen} ft`, x, midY);
+  ctx.globalAlpha = 1;
+}
+
 function _drawCableLabel(ctx, x1, x2, y, cableLen, muted, accent, isActive) {
   const midX = (x1 + x2) / 2;
   ctx.font = `${isActive ? 700 : 400} 8px "JetBrains Mono", monospace`;
@@ -673,8 +918,14 @@ function _setupDiagramDrag() {
   function bodyHitTest(mx, my) {
     for (let i = 0; i < diagBodyRects.length; i++) {
       const r = diagBodyRects[i];
-      if (mx >= r.x - HIT_PAD && mx <= r.x + 22 + HIT_PAD &&
-          my >= r.topY - HIT_PAD && my <= r.botY + HIT_PAD) return i;
+      if (diagVertical) {
+        // In vertical mode body is at r.x ± 7 (BODY_W/2), spanning topY–botY
+        if (mx >= r.x - 10 - HIT_PAD && mx <= r.x + 10 + HIT_PAD &&
+            my >= r.topY - HIT_PAD   && my <= r.botY + HIT_PAD) return i;
+      } else {
+        if (mx >= r.x - HIT_PAD && mx <= r.x + 22 + HIT_PAD &&
+            my >= r.topY - HIT_PAD && my <= r.botY + HIT_PAD) return i;
+      }
     }
     return -1;
   }
@@ -703,8 +954,8 @@ function _setupDiagramDrag() {
     const [mx, my] = canvasXY(e.clientX, e.clientY);
     const bi = bodyHitTest(mx, my);
     if (bi >= 0) {
-      diagDrag = { idx: bi, startX: mx, startLen: splitterChain[bi].cableLen ?? 0 };
-      canvas.style.cursor = 'ew-resize';
+      diagDrag = { idx: bi, startX: mx, startY: my, startLen: splitterChain[bi].cableLen ?? 0 };
+      canvas.style.cursor = diagVertical ? 'ns-resize' : 'ew-resize';
       e.preventDefault(); return;
     }
     const lr = legHitTest(mx, my);
@@ -719,13 +970,15 @@ function _setupDiagramDrag() {
   canvas.addEventListener('mousemove', e => {
     if (diagDrag || diagLegDrag) return;
     const [mx, my] = canvasXY(e.clientX, e.clientY);
-    canvas.style.cursor = (bodyHitTest(mx, my) >= 0 || legHitTest(mx, my)) ? 'ew-resize' : 'default';
+    const hit = bodyHitTest(mx, my) >= 0 || legHitTest(mx, my);
+    canvas.style.cursor = hit ? (diagVertical ? 'ns-resize' : 'ew-resize') : 'default';
   });
 
   window.addEventListener('mousemove', e => {
     if (diagDrag) {
-      const [mx] = canvasXY(e.clientX, e.clientY);
-      const newLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
+      const [mx, my] = canvasXY(e.clientX, e.clientY);
+      const delta = diagVertical ? (my - diagDrag.startY) : (mx - diagDrag.startX);
+      const newLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + delta / PX_PER_FT)));
       splitterChain[diagDrag.idx].cableLen = newLen;
       _drawDiagram(); return;
     }
@@ -746,7 +999,10 @@ function _setupDiagramDrag() {
     e.preventDefault();
     const [mx, my] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
     const bi = bodyHitTest(mx, my);
-    if (bi >= 0) { diagDrag = { idx: bi, startX: mx, startLen: splitterChain[bi].cableLen ?? 0 }; return; }
+    if (bi >= 0) {
+      diagDrag = { idx: bi, startX: mx, startY: my, startLen: splitterChain[bi].cableLen ?? 0 };
+      return;
+    }
     const lr = legHitTest(mx, my);
     if (lr) diagLegDrag = { i: lr.i, j: lr.j, startX: mx, startLen: splitterChain[lr.i].legLens?.[lr.j] ?? 0 };
   }, { passive: false });
@@ -754,9 +1010,10 @@ function _setupDiagramDrag() {
   canvas.addEventListener('touchmove', e => {
     if (!diagDrag && !diagLegDrag) return;
     e.preventDefault();
-    const [mx] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
+    const [mx, my] = canvasXY(e.touches[0].clientX, e.touches[0].clientY);
     if (diagDrag) {
-      splitterChain[diagDrag.idx].cableLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + (mx - diagDrag.startX) / PX_PER_FT)));
+      const delta = diagVertical ? (my - diagDrag.startY) : (mx - diagDrag.startX);
+      splitterChain[diagDrag.idx].cableLen = Math.round(Math.max(0, Math.min(MAX_CABLE, diagDrag.startLen + delta / PX_PER_FT)));
     } else {
       if (!splitterChain[diagLegDrag.i].legLens) splitterChain[diagLegDrag.i].legLens = [];
       splitterChain[diagLegDrag.i].legLens[diagLegDrag.j] = Math.round(Math.max(0, Math.min(500, diagLegDrag.startLen + (mx - diagLegDrag.startX) / PX_PER_FT)));
@@ -877,6 +1134,11 @@ document.addEventListener('DOMContentLoaded', () => {
     lengthInput.value = ft;
     sketchLengthVal.textContent = ft + ' ft';
     updateResults();
+  });
+
+  /* Redraw diagram on resize so vertical/horizontal mode switches correctly */
+  window.addEventListener('resize', () => {
+    if (diagCanvas) _drawDiagram();
   });
 
   /* Initial render */
