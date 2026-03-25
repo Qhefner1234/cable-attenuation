@@ -651,6 +651,8 @@ html[data-theme="light"] .icon-moon { display: block; }
   display: flex;
   align-items: baseline;
   gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
 }
 .sig-loss-row {
   background: transparent;
@@ -1236,6 +1238,16 @@ html[data-theme="light"] .icon-moon { display: block; }
   .splitter-section {
     padding: 1rem 1rem 0.75rem;
     gap: 1rem;
+  }
+
+  /* Prevent any panel content from overflowing the phone screen */
+  .panel {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  .sig-row,
+  .sig-results {
+    max-width: 100%;
   }
 
   .section-divider { padding: 0 1rem; }

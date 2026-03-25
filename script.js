@@ -411,7 +411,8 @@ function _drawDiagram() {
 
   // ── No splitters yet — always draw source box + hint ───────
   if (splitterChain.length === 0) {
-    const W = 340, H = 90;
+    const container2 = canvas.parentElement;
+    const W = container2 ? Math.max(280, container2.clientWidth) : 340, H = 90;
     canvas.width  = W * dpr; canvas.height = H * dpr;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     const ctx = canvas.getContext('2d');
