@@ -81,6 +81,7 @@ body {
   background-color: var(--bg);
   color: var(--fg);
   height: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

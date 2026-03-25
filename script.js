@@ -387,10 +387,11 @@ function _drawDiagram() {
   const canvas = diagCanvas;
   if (!canvas) return;
 
-  // Detect narrow containers — switch to vertical layout on mobile
-  const container = canvas.parentElement;
-  const containerW = container ? container.clientWidth : 600;
-  diagVertical = containerW < 540;
+  // Detect narrow viewports — switch to vertical layout on mobile
+  // Use window.innerWidth (viewport) not container.clientWidth which can be
+  // inflated when the page has horizontal overflow.
+  const viewportW = window.innerWidth || document.documentElement.clientWidth || 600;
+  diagVertical = viewportW < 540;
   if (diagVertical) { _drawDiagramVertical(); return; }
 
   const in42  = parseFloat(document.getElementById('sigIn42').value);
@@ -664,7 +665,8 @@ function _drawDiagramVertical() {
   if (!canvas) return;
 
   const container = canvas.parentElement;
-  const containerW = container ? Math.max(280, container.clientWidth) : 320;
+  const viewportW = window.innerWidth || document.documentElement.clientWidth || 320;
+  const containerW = Math.max(280, Math.min(container ? container.clientWidth : 320, viewportW - 16));
 
   const in42     = parseFloat(document.getElementById('sigIn42').value);
   const in860    = parseFloat(document.getElementById('sigIn860').value);
