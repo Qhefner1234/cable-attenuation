@@ -624,16 +624,22 @@ function _setupDiagramDrag() {
   const canvas = diagCanvas;
   if (!canvas) return;
 
+  // On touch devices use a larger hit pad so small elements are easier to tap
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+  const HIT_PAD = isTouch ? 12 : 4;
+
   function bodyHitTest(mx, my) {
     for (let i = 0; i < diagBodyRects.length; i++) {
       const r = diagBodyRects[i];
-      if (mx >= r.x && mx <= r.x + 22 && my >= r.topY && my <= r.botY) return i;
+      if (mx >= r.x - HIT_PAD && mx <= r.x + 22 + HIT_PAD &&
+          my >= r.topY - HIT_PAD && my <= r.botY + HIT_PAD) return i;
     }
     return -1;
   }
   function legHitTest(mx, my) {
     for (const r of diagLegRects) {
-      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) return r;
+      if (mx >= r.x - HIT_PAD && mx <= r.x + r.w + HIT_PAD &&
+          my >= r.y - HIT_PAD && my <= r.y + r.h + HIT_PAD) return r;
     }
     return null;
   }

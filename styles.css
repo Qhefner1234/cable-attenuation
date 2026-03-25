@@ -1120,11 +1120,98 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 @media (max-width: 600px) {
+  .run-section,
+  .splitter-section {
+    padding: 1rem 1rem 0.75rem;
+    gap: 1rem;
+  }
+
+  .section-divider {
+    padding: 0 1rem;
+  }
+
   .result-cards {
     grid-template-columns: 1fr;
   }
 
   .result-num {
     font-size: 1.75rem;
+  }
+
+  /* Hide cable dude on small screens to save space */
+  .panel-dude {
+    display: none;
+  }
+
+  /* Bigger touch targets for preset / type / connect buttons */
+  .preset-btn,
+  .sp-type-btn {
+    padding: 0.55rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .sp-connect-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+
+  .sp-remove-btn {
+    padding: 0.4rem 0.5rem;
+    font-size: 1rem;
+  }
+
+  /* Stack splitter leg row: label on top, cable+vals below */
+  .sp-leg {
+    flex-wrap: wrap;
+    gap: 0.25rem 0.5rem;
+    padding: 0.5rem 0.625rem;
+  }
+
+  .sp-leg-label {
+    width: 100%;
+    flex: none;
+  }
+
+  .sp-leg-len {
+    width: 3.5rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  /* Larger signal-level inputs */
+  .sig-input {
+    font-size: 1rem;
+  }
+
+  /* Spin buttons easier to tap */
+  .spin-btn {
+    min-width: 40px;
+  }
+}
+
+@media (max-width: 400px) {
+  .run-section,
+  .splitter-section {
+    padding: 0.75rem 0.75rem 0.625rem;
+  }
+
+  /* Info topbar: smaller text, tighter */
+  .info-topbar {
+    padding: 0.25rem 0.75rem;
+    gap: 0.3rem;
+  }
+
+  .info-topbar-sep {
+    display: none;
+  }
+
+  /* Cable buttons full-width on tiny screens */
+  .cable-btn-group {
+    width: 100%;
+  }
+
+  .cable-btn {
+    flex: 1;
   }
 }
