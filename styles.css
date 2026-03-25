@@ -386,10 +386,10 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 .cable-btn.active {
-  background: var(--accent-glow);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), inset 0 0 12px var(--accent-glow);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .cable-info {
@@ -512,8 +512,8 @@ html[data-theme="light"] .icon-moon { display: block; }
   flex: 1;
   padding: 0.3rem 0;
   border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-  background: transparent;
+  border: 1px solid var(--border);
+  background: var(--bg-highlight);
   color: var(--fg-muted);
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.75rem;
@@ -723,17 +723,22 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 .sp-remove-btn {
-  background: none;
-  border: none;
-  color: var(--fg-muted);
+  background: var(--red-muted);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--red);
   cursor: pointer;
-  font-size: 0.625rem;
-  padding: 0 0.125rem;
+  font-size: 0.6875rem;
+  padding: 0.15rem 0.4rem;
   line-height: 1;
-  transition: color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.sp-remove-btn:hover { color: var(--red); }
+.sp-remove-btn:hover {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
 
 .sp-legs {
   display: flex;
@@ -777,7 +782,7 @@ html[data-theme="light"] .icon-moon { display: block; }
   font-size: 0.6875rem;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  background: var(--bg-input);
+  background: var(--bg-highlight);
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   color: var(--fg-muted);
@@ -786,14 +791,15 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 .sp-cable-btn.active {
-  background: var(--accent-glow);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
+  color: #fff;
 }
 
 .sp-cable-btn:hover:not(.active) {
-  border-color: var(--border);
-  color: var(--fg);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .sp-leg-cable {
@@ -852,10 +858,10 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 .sp-connect-btn {
-  background: none;
-  border: 1px solid var(--border-subtle);
+  background: var(--green-muted);
+  border: 1px solid var(--green);
   border-radius: 4px;
-  color: var(--fg-muted);
+  color: var(--green);
   font-size: 0.7rem;
   width: 18px;
   height: 18px;
@@ -868,9 +874,9 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 .sp-connect-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-glow);
+  border-color: var(--green);
+  color: #fff;
+  background: var(--green);
 }
 
 .sp-prompt {
@@ -888,11 +894,12 @@ html[data-theme="light"] .icon-moon { display: block; }
 }
 
 .sp-type-btn {
-  padding: 0.3rem 0.6rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg-highlight);
-  color: var(--fg-dim);
+  color: var(--fg);
+  box-shadow: var(--shadow-sm);
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.6875rem;
   font-weight: 600;
@@ -904,14 +911,15 @@ html[data-theme="light"] .icon-moon { display: block; }
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-glow);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 .sp-reset-btn {
   margin-top: 0.375rem;
-  padding: 0.25rem 0.625rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-  background: transparent;
+  border: 1px solid var(--border);
+  background: var(--bg-highlight);
   color: var(--fg-muted);
   font-size: 0.6875rem;
   cursor: pointer;
