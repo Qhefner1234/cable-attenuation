@@ -1262,7 +1262,8 @@ html[data-theme="light"] .icon-moon { display: block; }
 
   .result-cards { grid-template-columns: 1fr; }
   .result-num   { font-size: 1.75rem; }
-  .panel-dude   { display: none; }
+  .panel-dude   { padding: 0.5rem 1rem 0.625rem; }
+  .panel-dude canvas { height: 80px !important; width: 100% !important; }
 
   /* ── Cable attenuation controls ── */
   .preset-btn {
